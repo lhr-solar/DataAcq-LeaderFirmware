@@ -1,6 +1,7 @@
 // src/main.c
 #include "stm32f413xx.h"
 #include "core_cm4.h"
+#include "system_stm32f4xx.h"
 
 int main(void) {
     for (volatile int i = 0; i < 100000; ++i) {
