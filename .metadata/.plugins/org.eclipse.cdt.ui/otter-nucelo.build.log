@@ -1,0 +1,10 @@
+21:04:16 **** Incremental Build of configuration Debug for project otter-nucelo ****
+make -j20 all 
+arm-none-eabi-size  otter-nucelo.elf 
+   text	   data	    bss	    dec	    hex	filename
+  10364	     12	   1796	  12172	   2f8c	otter-nucelo.elf
+Finished building: default.size.stdout
+ 
+
+21:04:17 Build Finished. 0 errors, 0 warnings. (took 303ms)
+

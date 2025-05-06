@@ -1,0 +1,10 @@
+19:12:55 **** Incremental Build of configuration Debug for project otter ****
+make -j20 all 
+arm-none-eabi-size  otter.elf 
+   text	   data	    bss	    dec	    hex	filename
+   8876	     12	   1796	  10684	   29bc	otter.elf
+Finished building: default.size.stdout
+ 
+
+19:12:55 Build Finished. 0 errors, 0 warnings. (took 360ms)
+
