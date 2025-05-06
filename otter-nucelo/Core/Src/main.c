@@ -111,22 +111,16 @@ int main(void)
   char buffer[] = { 'H', 'e', 'l', 'l', 'o', '\0' }; // Manual
   while (1)
   {
-    /* USER CODE END WHILE */
-    // HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
     HAL_Delay(1);
 
-    // uint8_t data = 0x5A;
-
-    HAL_UART_Transmit(&huart5, (uint8_t*)(&(buffer[4])), 1, 1000);
-    HAL_UART_Transmit(&huart5, (uint8_t*)(&(buffer[3])), 1, 1000);
-    HAL_UART_Transmit(&huart5, (uint8_t*)(&(buffer[2])), 1, 1000);
-    HAL_UART_Transmit(&huart5, (uint8_t*)(&(buffer[1])), 1, 1000);
-    HAL_UART_Transmit(&huart5, (uint8_t*)(&(buffer[0])), 1, 1000);
+    HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[4])), 1, 1000);
+    HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[3])), 1, 1000);
+    HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[2])), 1, 1000);
+    HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[1])), 1, 1000);
+    HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[0])), 1, 1000);
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-    // if(HAL_UART_Transmit(&huart2, &data, 1, HAL_MAX_DELAY) != HAL_OK){
-    //   HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-    // }
 
+    /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
