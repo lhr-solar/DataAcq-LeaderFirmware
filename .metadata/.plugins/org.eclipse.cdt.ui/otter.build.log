@@ -1,10 +1,27 @@
-19:12:55 **** Incremental Build of configuration Debug for project otter ****
+18:42:29 **** Incremental Build of configuration Debug for project otter ****
 make -j20 all 
-arm-none-eabi-size  otter.elf 
-   text	   data	    bss	    dec	    hex	filename
-   8876	     12	   1796	  10684	   29bc	otter.elf
-Finished building: default.size.stdout
- 
+arm-none-eabi-gcc "../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F413xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.d" -MT"Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.o"
+../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c:218: warning: "CAN1" redefined
+  218 | #define CAN1
+      | 
+In file included from ../Drivers/CMSIS/Device/ST/STM32F4xx/Include/stm32f4xx.h:170,
+                 from ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_def.h:29,
+                 from ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_rcc.h:27,
+                 from ../Core/Inc/stm32f4xx_hal_conf.h:275,
+                 from ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:29,
+                 from ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c:213:
+../Drivers/CMSIS/Device/ST/STM32F4xx/Include/stm32f413xx.h:1107: note: this is the location of the previous definition
+ 1107 | #define CAN1                ((CAN_TypeDef *) CAN1_BASE)
+      | 
+../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c: In function 'HAL_CAN_ConfigFilter':
+../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c:872:20: error: expected expression before ';' token
+  872 |       can_ip = CAN1;
+      |                    ^
+../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c:898:23: error: expected expression before ')' token
+  898 |     if (can_ip == CAN1)
+      |                       ^
+make: *** [Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk:61: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.o] Error 1
+"make -j20 all" terminated with exit code 2. Build might be incomplete.
 
-19:12:55 Build Finished. 0 errors, 0 warnings. (took 360ms)
+18:42:30 Build Failed. 3 errors, 1 warnings. (took 529ms)
 

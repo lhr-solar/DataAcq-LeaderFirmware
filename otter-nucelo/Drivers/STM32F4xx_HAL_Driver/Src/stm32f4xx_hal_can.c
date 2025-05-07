@@ -325,6 +325,7 @@ HAL_StatusTypeDef HAL_CAN_Init(CAN_HandleTypeDef *hcan)
 
 #else
   if (hcan->State == HAL_CAN_STATE_RESET)
+  // if (1 == 1)
   {
     /* Init the low level hardware: CLOCK, NVIC */
     HAL_CAN_MspInit(hcan);

@@ -1,4 +1,3 @@
-/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : main.c
@@ -18,6 +17,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "stm32f4xx_hal.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -109,10 +110,156 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   char buffer[] = { 'H', 'e', 'l', 'l', 'o', '\0' }; // Manual
+
+
+
+  CAN_FilterTypeDef filterConfig;
+
+
+  // Set the bits of the 32bit ID Register
+    // Note: does not matter what these are since Mask will be 0x00000000
+  filterConfig.FilterIdHigh = 0x0000; 
+  filterConfig.FilterIdLow = 0x0000;
+
+  // Set the bits of the MASK Register. If a bit is set, the corresponding bit of the 
+    // received ID will be compared with the corresponding bit of the ID Register. If 
+    // all bits that the mask requies to be checked match, then the CAN ID is accepted. 
+  filterConfig.FilterMaskIdHigh = 0x0000; 
+  filterConfig.FilterMaskIdLow = 0x0000;
+    // B/c we want to receive all CAN IDs, do not check any bits
+
+  filterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+
+  // This struct if for filter bank 0 
+    // Note: can call the config filter with this struct again but change which 
+    // bank we are talking about. 
+  filterConfig.FilterBank = 0;
+
+  // 2 Options: MASK mode or LIST mode 
+    // Mask mode: use the Mask to compare the bits
+    // List mode: you can only compare and accept two CAN IDs (if 32 bit ID register) or four CAN IDs (if two 16 bit regsiters)
+  filterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+
+  // 32 bit ID vs two 16 bit ID register
+    // For us does not matter b/c its just all 0s 
+  filterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+
+  // Enable this filter bank
+  filterConfig.FilterActivation = ENABLE;
+
+  // We are not giving any filters to the slave can (CAN2)
+    // We are only using CAN1 and CAN3 
+  filterConfig.SlaveStartFilterBank = 0;
+
+  HAL_CAN_ConfigFilter(&hcan1, &filterConfig);
+
+  // temp
+  HAL_CAN_Start(&hcan1);
+
+
+  CAN_TxHeaderTypeDef   TxHeader;
+  uint32_t              TxMailbox;  // while mailbox gets used is written here
+  uint8_t               TxData[8];
+
+  TxHeader.StdId = 0x11;
+  TxHeader.RTR = CAN_RTR_DATA;
+  TxHeader.IDE = CAN_ID_STD;
+  TxHeader.DLC = 2;
+  TxHeader.TransmitGlobalTime = DISABLE;
+
+  TxData[0] = 0xCA;
+  TxData[1] = 0xFE;
+ 
+  
+  // while(HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) != 3) {}
+
+  while(1){
+    HAL_Delay(100);
+    /* Request transmission */
+
+    // Wait for HAL Okay
+    if(HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+    {
+      while(1){
+        HAL_Delay(100);
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      }
+    }
+
+    // Wait for the transmit to actuall happen
+    // while (1) {
+    //   uint32_t tsr = READ_REG(hcan1.Instance->TSR);
+    //   if (tsr & (CAN_TSR_TXOK0 | CAN_TSR_TXOK1 | CAN_TSR_TXOK2)) break;
+    //   HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    // }
+
+    // Message Sent, toggle LED real quick
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    HAL_Delay(200);
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+
+    while(HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) != 3) {
+        HAL_Delay(2000);
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    }
+
+  }
+
+
+
+
+  while (1){
+
+    CAN_RxHeaderTypeDef rxHeader;
+    uint8_t rxData[8];
+
+    // Check if there are messages in the FIFO
+    if (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0))
+    {
+        // Retrieve the received message
+        if (HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
+        {
+            // Check if the message ID is 0x0FB
+            // if (rxHeader.StdId == 0x0FB)
+            // {
+                // Handle received data (e.g., print, process, etc.)
+            HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+            // }
+        }
+    }
+
+  }
+
+
   while (1)
   {
     HAL_Delay(1);
 
+
+
+  // (+) HAL_CAN_AddTxMessage             : Add a message to the Tx mailboxes
+  //     and activate the corresponding
+  //     transmission request
+  // (+) HAL_CAN_AbortTxRequest           : Abort transmission request
+  // (+) HAL_CAN_GetTxMailboxesFreeLevel  : Return Tx mailboxes free level
+  // (+) HAL_CAN_IsTxMessagePending       : Check if a transmission request is
+  //     pending on the selected Tx mailbox
+  // (+) HAL_CAN_GetRxMessage             : Get a CAN frame from the Rx FIFO
+
+    // HAL_StatusTypeDef HAL_CAN_Start(CAN_HandleTypeDef *hcan)
+
+
+
+    // HAL_CAN_AddTxMessage(&hcan1, );
+    // HAL_StatusTypeDef HAL_CAN_AddTxMessage(CAN_HandleTypeDef *hcan, const CAN_TxHeaderTypeDef *pHeader, 
+    //                                         const uint8_t aData[], uint32_t *pTxMailbox)
+
+
+    // HAL_CAN_GetRXMessage(&hcan1, CAN_RX_FIFO0, 
+    // HAL_StatusTypeDef HAL_CAN_GetRxMessage(CAN_HandleTypeDef *hcan, uint32_t RxFifo, 
+                                            // CAN_RxHeaderTypeDef *pHeader, uint8_t aData[])
+
+    // HAL_CAN_Transmit()
     HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[4])), 1, 1000);
     HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[3])), 1, 1000);
     HAL_UART_Transmit(&huart2, (uint8_t*)(&(buffer[2])), 1, 1000);
@@ -121,6 +268,7 @@ int main(void)
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -184,14 +332,15 @@ static void MX_CAN1_Init(void)
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
   hcan1.Init.Prescaler = 16;
-  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  // hcan1.Init.Mode = CAN_MODE_NORMAL;
+  hcan1.Init.Mode = CAN_MODE_LOOPBACK;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
   hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
   hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
-  hcan1.Init.AutoRetransmission = DISABLE;
+  hcan1.Init.AutoRetransmission = ENABLE;
   hcan1.Init.ReceiveFifoLocked = DISABLE;
   hcan1.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan1) != HAL_OK)

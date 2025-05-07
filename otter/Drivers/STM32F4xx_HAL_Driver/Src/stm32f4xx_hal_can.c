@@ -215,7 +215,7 @@
 /** @addtogroup STM32F4xx_HAL_Driver
   * @{
   */
-
+#define CAN1
 #if defined(CAN1)
 
 /** @defgroup CAN CAN
