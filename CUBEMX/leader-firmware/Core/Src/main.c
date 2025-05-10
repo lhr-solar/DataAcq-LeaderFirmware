@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "stm32f4xx_hal_gpio.h"
+#include "opencl-c-base.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -104,6 +106,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+      HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
