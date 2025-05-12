@@ -18,8 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "stm32f4xx_hal_gpio.h"
-#include "opencl-c-base.h"
+#include "stm32f4xx.h"
+#include "stm32f4xx_hal_can.h"
+#include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -45,6 +46,7 @@
 CAN_HandleTypeDef hcan1;
 CAN_HandleTypeDef hcan3;
 
+UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -57,12 +59,66 @@ static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_CAN3_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_UART5_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+typedef struct{
+    GPIO_TypeDef *GPIOx;
+    uint16_t GPIO_PIN;
+
+} gpio_t;
+
+static const gpio_t ss_l[] = {
+    {GPIOB, GPIO_PIN_10}, 
+    {GPIOB, GPIO_PIN_1}, 
+    {GPIOB, GPIO_PIN_14}, 
+    {GPIOB, GPIO_PIN_2}, 
+    {GPIOB, GPIO_PIN_0}, 
+    {GPIOC, GPIO_PIN_5}, 
+    {GPIOC, GPIO_PIN_4}
+};
+
+static const gpio_t ss_r[] = {
+    {GPIOC, GPIO_PIN_6}, 
+    {GPIOC, GPIO_PIN_7}, 
+    {GPIOB, GPIO_PIN_15}, 
+    {GPIOA, GPIO_PIN_15}, 
+    {GPIOC, GPIO_PIN_10}, 
+    {GPIOC, GPIO_PIN_11}, 
+    {GPIOC, GPIO_PIN_12}
+};
+
+void iter(void){
+    static int i = 0;
+    HAL_GPIO_TogglePin(ss_r[i].GPIOx, ss_r[i].GPIO_PIN);
+    HAL_GPIO_TogglePin(ss_l[i].GPIOx, ss_l[i].GPIO_PIN);
+    i = (i + 1) % 7;
+}
+
+static const gpio_t arr[] = {
+        {GPIOB, GPIO_PIN_10 },
+        {GPIOC, GPIO_PIN_6  },
+        {GPIOC, GPIO_PIN_7  },
+        {GPIOC, GPIO_PIN_12 },
+        {GPIOC, GPIO_PIN_4  },
+        {GPIOB, GPIO_PIN_0  },
+        {GPIOB, GPIO_PIN_2  },
+        {GPIOA, GPIO_PIN_15 },
+        {GPIOB, GPIO_PIN_15 },
+        {GPIOC, GPIO_PIN_12 },
+        {GPIOC, GPIO_PIN_4  }
+        };
+
+void cyc(void){
+    static int i = 1;
+    HAL_GPIO_WritePin(arr[i].GPIOx, arr[i].GPIO_PIN, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(arr[(i+1)%11].GPIOx, arr[(i+1)%11].GPIO_PIN, GPIO_PIN_RESET);
+    i = (i + 1) % 11;
+}
 
 /* USER CODE END 0 */
 
@@ -98,16 +154,60 @@ int main(void)
   MX_CAN1_Init();
   MX_CAN3_Init();
   MX_USART2_UART_Init();
+  MX_UART5_Init();
   /* USER CODE BEGIN 2 */
+  CAN_FilterTypeDef filterConfig;
+
+  filterConfig.FilterIdHigh = 0x0000;
+  filterConfig.FilterIdLow  = 0x0000;
+
+  filterConfig.FilterMaskIdHigh = 0x0000;
+  filterConfig.FilterMaskIdLow  = 0x0000;
+
+  filterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  filterConfig.FilterBank = 0;
+  filterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  filterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  filterConfig.FilterActivation = ENABLE;
+  filterConfig.SlaveStartFilterBank = 0;
+
+  HAL_CAN_ConfigFilter(&hcan1, &filterConfig);
+
+  HAL_CAN_Start(&hcan1);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  const uint8_t pData[] = " fire walk with me\n";
+
+  CAN_TxHeaderTypeDef TxHeader;
+  uint32_t TxMailbox;
+  uint8_t TxData[] = {0xDE, 0xAD, 0xBE, 0xEF};
+
+  TxHeader.StdId = 0x123;
+  TxHeader.RTR = CAN_RTR_DATA;
+  TxHeader.IDE = CAN_ID_STD;
+  TxHeader.DLC = 4;
+  TxHeader.TransmitGlobalTime = DISABLE;
+
+    CAN_RxHeaderTypeDef rxHeader;
+    uint8_t rxData[8];
+
+
+
   while (1)
   {
+      //cyc();
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
-      HAL_Delay(100);
+      HAL_UART_Transmit(&huart2, pData, sizeof(pData), HAL_MAX_DELAY);
+
+      HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+      if(HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK){
+          cyc();
+      };
+
+      HAL_Delay(50);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -135,7 +235,13 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 16;
+  RCC_OscInitStruct.PLL.PLLN = 192;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -145,12 +251,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -172,11 +278,11 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = 16;
+  hcan1.Init.Prescaler = 12;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_5TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
@@ -231,6 +337,39 @@ static void MX_CAN3_Init(void)
 }
 
 /**
+  * @brief UART5 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_UART5_Init(void)
+{
+
+  /* USER CODE BEGIN UART5_Init 0 */
+
+  /* USER CODE END UART5_Init 0 */
+
+  /* USER CODE BEGIN UART5_Init 1 */
+
+  /* USER CODE END UART5_Init 1 */
+  huart5.Instance = UART5;
+  huart5.Init.BaudRate = 115200;
+  huart5.Init.WordLength = UART_WORDLENGTH_8B;
+  huart5.Init.StopBits = UART_STOPBITS_1;
+  huart5.Init.Parity = UART_PARITY_NONE;
+  huart5.Init.Mode = UART_MODE_TX_RX;
+  huart5.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart5.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART5_Init 2 */
+
+  /* USER CODE END UART5_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -280,29 +419,23 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
-                          |GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
+                          |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_10
-                          |GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+                          |GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_SET);
 
-  /*Configure GPIO pins : PC3 PC5 PC6 PC7
-                           PC10 PC11 PC12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
-                          |GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
+  /*Configure GPIO pins : PC3 PC4 PC5 PC6
+                           PC7 PC10 PC11 PC12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
+                          |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB0 PB1 PB2 PB10
