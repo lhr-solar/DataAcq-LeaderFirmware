@@ -18,9 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "stm32f4xx.h"
-#include "stm32f4xx_hal_can.h"
-#include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -180,6 +177,7 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   const uint8_t pData[] = " fire walk with me\n";
+  const uint8_t rec[] = " received CAN\n";
 
   CAN_TxHeaderTypeDef TxHeader;
   uint32_t TxMailbox;
@@ -191,23 +189,27 @@ int main(void)
   TxHeader.DLC = 4;
   TxHeader.TransmitGlobalTime = DISABLE;
 
-    CAN_RxHeaderTypeDef rxHeader;
-    uint8_t rxData[8];
+  CAN_RxHeaderTypeDef rxHeader;
+  uint8_t rxData[8];
 
 
 
   while (1)
   {
-      //cyc();
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
       HAL_UART_Transmit(&huart2, pData, sizeof(pData), HAL_MAX_DELAY);
 
       HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+
+
       if(HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK){
+          for(int i = 0; i < 10; i++){
+            HAL_UART_Transmit(&huart2, rec, sizeof(rec), HAL_MAX_DELAY);
+          }
           cyc();
       };
 
-      HAL_Delay(50);
+      HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -278,11 +280,11 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = 12;
+  hcan1.Init.Prescaler = 96;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN_BS1_5TQ;
-  hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_4TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_5TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
