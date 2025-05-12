@@ -178,13 +178,14 @@ int main(void)
     /* Request transmission */
 
     // Wait for HAL Okay
-    if(HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
-    {
-      while(1){
-        HAL_Delay(100);
-        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-      }
-    }
+    HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+    // if(HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+    // {
+    //   while(1){
+    //     HAL_Delay(100);
+    //     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    //   }
+    // }
 
     // Wait for the transmit to actuall happen
     // while (1) {
@@ -198,10 +199,32 @@ int main(void)
     HAL_Delay(200);
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 
-    while(HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) != 3) {
-        HAL_Delay(2000);
-        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    // while(HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) != 3) {
+    //     HAL_Delay(2000);
+    //     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    // }
+
+    CAN_RxHeaderTypeDef rxHeader;
+    uint8_t rxData[8];
+
+    // Check if there are messages in the FIFO
+    if (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0))
+    {
+        // Retrieve the received message
+        if (HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
+        {
+            // Check if the message ID is 0x0FB
+            // if (rxHeader.StdId == 0x0FB)
+            // {
+                // Handle received data (e.g., print, process, etc.)
+            for(int i = 0; i < 100; i++){
+              HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+              HAL_Delay(10);
+            }
+            // }
+        }
     }
+
 
   }
 
@@ -332,8 +355,8 @@ static void MX_CAN1_Init(void)
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
   hcan1.Init.Prescaler = 16;
-  // hcan1.Init.Mode = CAN_MODE_NORMAL;
-  hcan1.Init.Mode = CAN_MODE_LOOPBACK;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  // hcan1.Init.Mode = CAN_MODE_LOOPBACK;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
   hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
   hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;

@@ -1,7 +1,7 @@
 LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/arch=x86_64
 LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/name=Local
 LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/os=win32
-configDescList=org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Test2-UART,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:otter,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:otter-nucelo
+configDescList=org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Test2-UART,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:otter-nucelo,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:otter
 eclipse.preferences.version=1
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Test2-UART/activeLaunchMode=run
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Test2-UART/activeLaunchTarget=null\:---

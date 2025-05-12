@@ -89,3 +89,122 @@ arm-none-eabi-size  otter-nucelo.elf
   10920	     12	   1796	  12728	   31b8	otter-nucelo.elf
 Finished building: default.size.stdout
  
+23:23:07 **** Incremental Build of configuration Debug for project otter-nucelo ****
+make -j20 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F446xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "otter-nucelo.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\Matthew King\STM32CubeIDE\workspace_1.17.0\DataAcq-LeaderFirmware\otter-nucelo\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="otter-nucelo.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: otter-nucelo.elf
+ 
+arm-none-eabi-size  otter-nucelo.elf 
+arm-none-eabi-objdump -h -S otter-nucelo.elf  > "otter-nucelo.list"
+   text	   data	    bss	    dec	    hex	filename
+  10916	     12	   1796	  12724	   31b4	otter-nucelo.elf
+Finished building: default.size.stdout
+ 
+Finished building: otter-nucelo.list
+ 
+23:24:35 **** Incremental Build of configuration Debug for project otter-nucelo ****
+make -j20 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F446xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "otter-nucelo.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\Matthew King\STM32CubeIDE\workspace_1.17.0\DataAcq-LeaderFirmware\otter-nucelo\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="otter-nucelo.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: otter-nucelo.elf
+ 
+arm-none-eabi-size  otter-nucelo.elf 
+arm-none-eabi-objdump -h -S otter-nucelo.elf  > "otter-nucelo.list"
+   text	   data	    bss	    dec	    hex	filename
+  10916	     12	   1796	  12724	   31b4	otter-nucelo.elf
+Finished building: default.size.stdout
+ 
+Finished building: otter-nucelo.list
+ 
+23:28:18 **** Incremental Build of configuration Debug for project otter-nucelo ****
+make -j20 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F446xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "otter-nucelo.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\Matthew King\STM32CubeIDE\workspace_1.17.0\DataAcq-LeaderFirmware\otter-nucelo\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="otter-nucelo.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: otter-nucelo.elf
+ 
+arm-none-eabi-size  otter-nucelo.elf 
+arm-none-eabi-objdump -h -S otter-nucelo.elf  > "otter-nucelo.list"
+   text	   data	    bss	    dec	    hex	filename
+  10916	     12	   1796	  12724	   31b4	otter-nucelo.elf
+Finished building: default.size.stdout
+ 
+Finished building: otter-nucelo.list
+ 
+23:32:55 **** Incremental Build of configuration Debug for project otter-nucelo ****
+make -j20 all 
+arm-none-eabi-size  otter-nucelo.elf 
+   text	   data	    bss	    dec	    hex	filename
+  11508	     12	   1796	  13316	   3404	otter-nucelo.elf
+Finished building: default.size.stdout
+ 
+23:34:40 **** Incremental Build of configuration Debug for project otter-nucelo ****
+make -j20 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F446xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "otter-nucelo.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\Matthew King\STM32CubeIDE\workspace_1.17.0\DataAcq-LeaderFirmware\otter-nucelo\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="otter-nucelo.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: otter-nucelo.elf
+ 
+arm-none-eabi-size  otter-nucelo.elf 
+arm-none-eabi-objdump -h -S otter-nucelo.elf  > "otter-nucelo.list"
+   text	   data	    bss	    dec	    hex	filename
+  11524	     12	   1796	  13332	   3414	otter-nucelo.elf
+Finished building: default.size.stdout
+ 
+Finished building: otter-nucelo.list
+ 
+23:39:11 **** Incremental Build of configuration Debug for project otter-nucelo ****
+make -j20 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F446xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "otter-nucelo.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\Matthew King\STM32CubeIDE\workspace_1.17.0\DataAcq-LeaderFirmware\otter-nucelo\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="otter-nucelo.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: otter-nucelo.elf
+ 
+arm-none-eabi-size  otter-nucelo.elf 
+arm-none-eabi-objdump -h -S otter-nucelo.elf  > "otter-nucelo.list"
+   text	   data	    bss	    dec	    hex	filename
+  11500	     12	   1796	  13308	   33fc	otter-nucelo.elf
+Finished building: default.size.stdout
+ 
+Finished building: otter-nucelo.list
+ 
+12:42:33 **** Build of configuration Debug for project otter ****
+make -j20 all 
+arm-none-eabi-size  otter.elf 
+   text	   data	    bss	    dec	    hex	filename
+   8852	     12	   1796	  10660	   29a4	otter.elf
+Finished building: default.size.stdout
+ 
+12:45:31 **** Incremental Build of configuration Debug for project otter ****
+make -j20 all 
+arm-none-eabi-size  otter.elf 
+   text	   data	    bss	    dec	    hex	filename
+   8996	     12	   1796	  10804	   2a34	otter.elf
+Finished building: default.size.stdout
+ 
+12:53:20 **** Incremental Build of configuration Debug for project otter ****
+make -j20 all 
+arm-none-eabi-size  otter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  10900	     12	   1796	  12708	   31a4	otter.elf
+Finished building: default.size.stdout
+ 
+14:15:53 **** Incremental Build of configuration Debug for project otter ****
+make -j20 all 
+arm-none-eabi-size  otter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  11164	     12	   1796	  12972	   32ac	otter.elf
+Finished building: default.size.stdout
+ 
+15:33:09 **** Incremental Build of configuration Debug for project otter ****
+make -j20 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F413xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "otter.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\Matthew King\STM32CubeIDE\workspace_1.17.0\DataAcq-LeaderFirmware\otter\STM32F413RHTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="otter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: otter.elf
+ 
+arm-none-eabi-size  otter.elf 
+arm-none-eabi-objdump -h -S otter.elf  > "otter.list"
+   text	   data	    bss	    dec	    hex	filename
+  11168	     12	   1796	  12976	   32b0	otter.elf
+Finished building: default.size.stdout
+ 
+Finished building: otter.list
+ 

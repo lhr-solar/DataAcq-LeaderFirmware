@@ -94,17 +94,17 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* hcan)
     /* Peripheral clock enable */
     __HAL_RCC_CAN1_CLK_ENABLE();
 
-    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
     /**CAN1 GPIO Configuration
-    PA11     ------> CAN1_RX
-    PA12     ------> CAN1_TX
+    PB8     ------> CAN1_RX
+    PB9     ------> CAN1_TX
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
+    GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    GPIO_InitStruct.Alternate = GPIO_AF8_CAN1;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN CAN1_MspInit 1 */
 
@@ -118,17 +118,17 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* hcan)
     /* Peripheral clock enable */
     __HAL_RCC_CAN3_CLK_ENABLE();
 
-    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
     /**CAN3 GPIO Configuration
-    PA8     ------> CAN3_RX
-    PA15     ------> CAN3_TX
+    PB3     ------> CAN3_RX
+    PB4     ------> CAN3_TX
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_15;
+    GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF11_CAN3;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN CAN3_MspInit 1 */
 
@@ -154,10 +154,10 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* hcan)
     __HAL_RCC_CAN1_CLK_DISABLE();
 
     /**CAN1 GPIO Configuration
-    PA11     ------> CAN1_RX
-    PA12     ------> CAN1_TX
+    PB8     ------> CAN1_RX
+    PB9     ------> CAN1_TX
     */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_11|GPIO_PIN_12);
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_8|GPIO_PIN_9);
 
   /* USER CODE BEGIN CAN1_MspDeInit 1 */
 
@@ -172,10 +172,10 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* hcan)
     __HAL_RCC_CAN3_CLK_DISABLE();
 
     /**CAN3 GPIO Configuration
-    PA8     ------> CAN3_RX
-    PA15     ------> CAN3_TX
+    PB3     ------> CAN3_RX
+    PB4     ------> CAN3_TX
     */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_8|GPIO_PIN_15);
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_3|GPIO_PIN_4);
 
   /* USER CODE BEGIN CAN3_MspDeInit 1 */
 

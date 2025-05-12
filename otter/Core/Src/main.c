@@ -101,6 +101,61 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  // Toggle LED on Start
+  // --------------------------------------------
+  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+  HAL_Delay(1000);
+  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+
+  // Set up FIlter 
+  // --------------------------------------------
+  CAN_FilterTypeDef filterConfig;
+  // Set the bits of the 32bit ID Register
+    // Note: does not matter what these are since Mask will be 0x00000000
+  filterConfig.FilterIdHigh = 0x0000; 
+  filterConfig.FilterIdLow = 0x0000;
+  // Set the bits of the MASK Register. If a bit is set, the corresponding bit of the 
+    // received ID will be compared with the corresponding bit of the ID Register. If 
+    // all bits that the mask requies to be checked match, then the CAN ID is accepted. 
+  filterConfig.FilterMaskIdHigh = 0x0000; 
+  filterConfig.FilterMaskIdLow = 0x0000;
+    // B/c we want to receive all CAN IDs, do not check any bits
+  filterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  // This struct if for filter bank 0 
+    // Note: can call the config filter with this struct again but change which 
+    // bank we are talking about. 
+  filterConfig.FilterBank = 0;
+  // 2 Options: MASK mode or LIST mode 
+    // Mask mode: use the Mask to compare the bits
+    // List mode: you can only compare and accept two CAN IDs (if 32 bit ID register) or four CAN IDs (if two 16 bit regsiters)
+  filterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  // 32 bit ID vs two 16 bit ID register
+    // For us does not matter b/c its just all 0s 
+  filterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  // Enable this filter bank
+  filterConfig.FilterActivation = ENABLE;
+  // We are not giving any filters to the slave can (CAN2)
+    // We are only using CAN1 and CAN3 
+  filterConfig.SlaveStartFilterBank = 0;
+  HAL_CAN_ConfigFilter(&hcan1, &filterConfig);
+
+  // Start Can 1
+  // --------------------------------------------
+  HAL_CAN_Start(&hcan1);
+
+  // Transmit Stuff 
+  // --------------------------------------------
+  CAN_TxHeaderTypeDef   TxHeader;
+  uint32_t              TxMailbox;  // while mailbox gets used is written here
+  uint8_t               TxData[8];
+  TxHeader.StdId = 0x11;
+  TxHeader.RTR = CAN_RTR_DATA;
+  TxHeader.IDE = CAN_ID_STD;
+  TxHeader.DLC = 2;
+  TxHeader.TransmitGlobalTime = DISABLE;
+  TxData[0] = 0xCA;
+  TxData[1] = 0xFE;
+ 
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -108,9 +163,35 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-    HAL_Delay(1000);
+
     /* USER CODE BEGIN 3 */
+    HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+
+    HAL_Delay(100);
+    if(HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0){
+      HAL_CAN_AbortTxRequest(&hcan1, 7);
+    }
+
+    // Message Sent, toggle LED real quick
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+    HAL_Delay(500);
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+
+    CAN_RxHeaderTypeDef rxHeader;
+    uint8_t rxData[8];
+
+    // Check if there are messages in the FIFO
+    if (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0))
+    {
+        if (HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
+        {
+            for(int i = 0; i < 5; i++){
+              HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+              HAL_Delay(100);
+            }
+        }
+    }
+
   }
   /* USER CODE END 3 */
 }
@@ -172,10 +253,10 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = 16;
+  hcan1.Init.Prescaler = 2;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_14TQ;
   hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
@@ -308,14 +389,41 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
+                          |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_10
+                          |GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : PC3 PC4 PC5 PC6
+                           PC7 PC10 PC11 PC12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
+                          |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PB0 PB1 PB2 PB10
+                           PB14 PB15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_10
+                          |GPIO_PIN_14|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
