@@ -18,9 +18,15 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_def.h"
+#include "stm32f4xx_hal_gpio.h"
+#include "stm32f4xx_hal_uart.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdint.h>
+#include <stdio.h>
 
 /* USER CODE END Includes */
 
@@ -192,15 +198,54 @@ int main(void)
   CAN_RxHeaderTypeDef rxHeader;
   uint8_t rxData[8];
 
+  uint8_t rand[] = " the horse is the white of the eyes\n";
+  int32_t count = 0;
+  uint8_t buffer_size = 64;
+  uint8_t char_buffer[buffer_size];
+  uint8_t char_buffer_len = 0;
 
+  // connect
+  uint8_t s1[] = "+++";
+  HAL_UART_Transmit(&huart2, s1, sizeof(s1), HAL_MAX_DELAY);
+  cyc();
+  HAL_Delay(100);
+  uint8_t s2[] = "ATDNPhoton\r";
+  HAL_UART_Transmit(&huart2, s2, sizeof(s2), HAL_MAX_DELAY);
+  cyc();
+  HAL_Delay(100);
+  uint8_t s4[] = "ATCN\r";
+  HAL_UART_Transmit(&huart2, s4, sizeof(s4), HAL_MAX_DELAY);
+  cyc();
+  HAL_Delay(100);
+
+
+  uint8_t sms1[] = "ATAP0\r";
+  HAL_UART_Transmit(&huart5, sms1, sizeof(sms1), HAL_MAX_DELAY);
+  HAL_Delay(1100);
+
+  uint8_t sms2[] = "ATIP2\r";
+  HAL_UART_Transmit(&huart5, sms2, sizeof(sms2), HAL_MAX_DELAY);
+  HAL_Delay(1100);
+
+  uint8_t num[] = "8173470041";
+  HAL_UART_Transmit(&huart5, num, sizeof(num), HAL_MAX_DELAY);
+  HAL_Delay(1100);
+
+  uint8_t sms3[] = "ATTD D\r";
+  HAL_UART_Transmit(&huart5, sms3, sizeof(sms3), HAL_MAX_DELAY);
+  HAL_Delay(1100);
+
+  uint8_t hello[] = "Hello\n\r";
+  HAL_UART_Transmit(&huart5, hello, sizeof(hello), HAL_MAX_DELAY);
 
   while (1)
   {
+      HAL_Delay(100);
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
       HAL_UART_Transmit(&huart2, pData, sizeof(pData), HAL_MAX_DELAY);
 
       HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
-
+      HAL_Delay(24);
 
       if(HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK){
           for(int i = 0; i < 10; i++){
@@ -209,7 +254,26 @@ int main(void)
           cyc();
       };
 
-      HAL_Delay(10);
+      HAL_UART_Transmit(&huart2, rec, sizeof(rec), HAL_MAX_DELAY);
+      HAL_Delay(32);
+
+      HAL_UART_Transmit(&huart2, rand, sizeof(rand), HAL_MAX_DELAY);
+      HAL_Delay(50);
+
+      count++;
+      char_buffer_len = snprintf((char*)char_buffer, sizeof(char_buffer), "count: %li\n", count);
+      HAL_UART_Transmit(&huart2, char_buffer, char_buffer_len, HAL_MAX_DELAY);
+
+     // need to implement the following:
+      // have radio heartbeat
+      // if no response, enter reconnect mode:
+      // enter AT mode
+      // wait for OK
+      // set destination node
+      // wait for ok
+      // write destination to place
+      // exit AT mode
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -448,6 +512,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA15 */
   GPIO_InitStruct.Pin = GPIO_PIN_15;
