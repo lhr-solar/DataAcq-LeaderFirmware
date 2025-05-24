@@ -18,9 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "stm32f4xx_hal.h"
-#include "stm32f4xx_hal_def.h"
-#include "stm32f4xx_hal_gpio.h"
+#include "stm32f4xx_hal_can.h"
+#include "stm32f4xx_hal_tim.h"
 #include "stm32f4xx_hal_uart.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -49,6 +48,8 @@
 CAN_HandleTypeDef hcan1;
 CAN_HandleTypeDef hcan3;
 
+TIM_HandleTypeDef htim14;
+
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart2;
 
@@ -63,6 +64,7 @@ static void MX_CAN1_Init(void);
 static void MX_CAN3_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_UART5_Init(void);
+static void MX_TIM14_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -123,6 +125,12 @@ void cyc(void){
     i = (i + 1) % 11;
 }
 
+// use as: (uint8_t*)packet
+typedef struct __attribute__((__packed__)) {
+    CAN_RxHeaderTypeDef header;
+    uint8_t data[8];
+} CAN_UART_Packet;
+
 /* USER CODE END 0 */
 
 /**
@@ -158,6 +166,7 @@ int main(void)
   MX_CAN3_Init();
   MX_USART2_UART_Init();
   MX_UART5_Init();
+  MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
   CAN_FilterTypeDef filterConfig;
 
@@ -177,13 +186,69 @@ int main(void)
   HAL_CAN_ConfigFilter(&hcan1, &filterConfig);
 
   HAL_CAN_Start(&hcan1);
+  HAL_TIM_Base_Start(&htim14);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  uint8_t sof[] = " SOF:\n\r";
+
+  CAN_TxHeaderTypeDef   TxHeader;
+  uint32_t              TxMailbox;  // which mailbox gets used is written here
+  uint8_t               TxData[8] = "daq :3\n\r";
+
+  TxHeader.StdId = 0x601;
+  TxHeader.RTR = CAN_RTR_DATA;
+  TxHeader.IDE = CAN_ID_STD;
+  TxHeader.DLC = 8;
+  TxHeader.TransmitGlobalTime = DISABLE;
+
+  uint8_t eof[] = " \n\r";
+  volatile uint16_t timer_val = 0;
+  uint8_t count = 0;
+  char uartBuff[32];
+  int uartBuffLen = 0;
+
+  CAN_UART_Packet cu_packet;
+
+  HAL_Delay(11000);
   while (1)
   {
+      // 125 k 4 car
+      
+      HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+      HAL_UART_Transmit(&huart2, sof, sizeof(sof), HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart5, sof, sizeof(sof), HAL_MAX_DELAY);
+      //cyc();
+      if (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0))
+      {
+        // Retrieve the received message
+        if (HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &cu_packet.header, cu_packet.data) == HAL_OK){
+            HAL_UART_Transmit(&huart2, (uint8_t*)&cu_packet, sizeof(cu_packet), HAL_MAX_DELAY);
+            HAL_UART_Transmit(&huart2, eof, sizeof(eof), HAL_MAX_DELAY);
+        }
+      } else {
+          cyc();
+      }
+
+      timer_val = __HAL_TIM_GET_COUNTER(&htim14);
+      count = (count + 1) % 255;
+      uartBuffLen = sprintf(uartBuff, "%i ", count);
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart5, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      uartBuffLen = sprintf(uartBuff, "%u", timer_val);
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart2, eof, sizeof(eof), HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart5, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart5, eof, sizeof(eof), HAL_MAX_DELAY);
+
+
+
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+      HAL_Delay(100);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -256,9 +321,10 @@ static void MX_CAN1_Init(void)
   hcan1.Instance = CAN1;
   hcan1.Init.Prescaler = 96;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
+  //hcan1.Init.Mode = CAN_MODE_LOOPBACK;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN_BS1_4TQ;
-  hcan1.Init.TimeSeg2 = CAN_BS2_5TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_2TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
@@ -309,6 +375,37 @@ static void MX_CAN3_Init(void)
   /* USER CODE BEGIN CAN3_Init 2 */
 
   /* USER CODE END CAN3_Init 2 */
+
+}
+
+/**
+  * @brief TIM14 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM14_Init(void)
+{
+
+  /* USER CODE BEGIN TIM14_Init 0 */
+
+  /* USER CODE END TIM14_Init 0 */
+
+  /* USER CODE BEGIN TIM14_Init 1 */
+
+  /* USER CODE END TIM14_Init 1 */
+  htim14.Instance = TIM14;
+  htim14.Init.Prescaler = 96-1;
+  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim14.Init.Period = 65535;
+  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM14_Init 2 */
+
+  /* USER CODE END TIM14_Init 2 */
 
 }
 
