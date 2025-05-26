@@ -66,7 +66,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_UART5_Init(void);
 static void MX_TIM14_Init(void);
 /* USER CODE BEGIN PFP */
-
+void read_meta_data(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -213,7 +213,7 @@ int main(void)
 
   CAN_UART_Packet cu_packet;
 
-  HAL_Delay(11000);
+  HAL_Delay(1000);
   while (1)
   {
       // 125 k 4 car
@@ -244,10 +244,10 @@ int main(void)
       HAL_UART_Transmit(&huart5, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
       HAL_UART_Transmit(&huart5, eof, sizeof(eof), HAL_MAX_DELAY);
 
-
+      read_meta_data();
 
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
-      HAL_Delay(100);
+      HAL_Delay(50);
 
     /* USER CODE END WHILE */
 
@@ -538,6 +538,89 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void read_meta_data(void){
+
+    for(int i = 0; i < 10; i ++){
+        cyc();
+        HAL_Delay(100);
+    }
+
+
+
+    // XBee needs 1 second of silence before and after sending "+++"
+    HAL_Delay(1001); 
+
+    // Step 1: Enter AT command mode by sending "+++"
+    const char enter_cmd[] = "+++";  // Or use: { '+', '+', '+', '\r' }
+    for (int i = 0; i < sizeof(enter_cmd) - 1; i++) {
+        HAL_UART_Transmit(&huart2, (uint8_t *)&enter_cmd[i], 1, HAL_MAX_DELAY);
+        HAL_Delay(100);  // 100 ms delay between each character
+    }
+
+    // XBee needs 1 second of silence before and after sending "+++"
+    // HAL_Delay(1001); 
+
+    // Step 2: Wait for "OK" response
+    volatile uint8_t RXdataOne = 9; // start as invalid value
+    volatile uint8_t RXdataTwo = 9; // start as invalid value
+    HAL_UART_Receive(&huart2, &RXdataOne, 1, HAL_MAX_DELAY);
+    HAL_UART_Receive(&huart2, &RXdataTwo, 1, HAL_MAX_DELAY);
+    
+    // If we got some data, then splin in the cycle loop
+    if( (RXdataOne == 79) && (RXdataTwo == 75)) {
+
+      RXdataOne = 0;
+      RXdataTwo = 0;
+
+      // GET OUT OF CMD MODE
+      const char exit_cmd[] = "ATCN\r";
+      for (int i = 0; i < sizeof(exit_cmd) - 1; i++) {
+          HAL_Delay(100);  // 100 ms delay between each character
+          HAL_UART_Transmit(&huart2, (uint8_t *)&exit_cmd[i], 1, HAL_MAX_DELAY);
+      }
+
+      // // LOOK FOR "OK" ON EXIT OF CMD MODE
+      // HAL_UART_Receive(&huart2, &RXdataOne, 1, HAL_MAX_DELAY);
+      // HAL_UART_Receive(&huart2, &RXdataTwo, 1, HAL_MAX_DELAY);
+
+      // // SPIN FAST IF GOT OK
+      // if( (RXdataOne == 79) && (RXdataTwo == 75)) {
+      //   while(1){
+      //       cyc();
+      //       HAL_Delay(50);
+      //   }
+      // }
+
+      // SPIN SLOW IF NO OK
+      while(1){
+          cyc();
+          HAL_Delay(50);
+      }
+    }
+
+    return;
+}
+
+
+void send_AT_cmd(char* tx_msg, char* rx_msg, uint32_t rx_length){
+
+    // 1) Transmit the msg 
+    for (int i = 0; i < sizeof(tx_msg); i++) {
+        HAL_UART_Transmit(&huart2, (uint8_t *)&tx_msg[i], 1, HAL_MAX_DELAY);
+        HAL_Delay(100);  // 100 ms delay between each character
+    }
+
+    // 2) Receive the msg
+    volatile uint8_t RXdata = 0; // start as invalid value
+    for (int i = 0; i < rx_length; i++) {
+        HAL_UART_Receive(&huart2, &RXdata, 1, 100);
+        rx_msg[i] = (char)RXdata;
+    }
+
+}
+
+
 
 /* USER CODE END 4 */
 
