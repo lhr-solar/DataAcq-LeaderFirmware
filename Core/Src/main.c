@@ -248,7 +248,7 @@ int main(void)
       read_meta_data();
 
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
-      HAL_Delay(50);
+      HAL_Delay(100);
 
     /* USER CODE END WHILE */
 
@@ -541,12 +541,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void read_meta_data(void){
-
-    for(int i = 0; i < 10; i ++){
-        cyc();
-        HAL_Delay(100);
-    }
-
     // XBee needs 1 second of silence before and after sending "+++"
     HAL_Delay(1001); 
 
@@ -560,20 +554,35 @@ void read_meta_data(void){
     volatile uint8_t RXdataTwo = 0;
     HAL_UART_Receive(&huart2, &RXdataOne, 1, 1500);
     HAL_UART_Receive(&huart2, &RXdataTwo, 1, 500);
-    
-    // If we got OK, then enter cycle loop
-    if( (RXdataOne == 79) && (RXdataTwo == 75)) {
+   
+    // Step 3: If NO Okay return error     
+    if( (RXdataOne != 79) || (RXdataTwo != 75)) {return;}
 
-      // GET OUT OF CMD MODE
-      const char exit_cmd[] = "ATCN\r";
-      send_AT_cmd(exit_cmd, 5, unused, 0, 50);
-
-      while(1){
-          cyc();
-          HAL_Delay(50);
-      }
+    // DEBUG 
+    for(int i = 0; i < 10; i ++){
+      cyc();
+      HAL_Delay(50);
     }
 
+    // Step 4: Actually get the data we want :)
+    const char cmd1[] = "ATNI\r";
+    volatile char name[9] = {0}; // Empty arr to take name
+    send_AT_cmd(cmd1, 5, name, 7, 30);
+    name[7] = '\n'; 
+      // Note sure if they send a CR at the end -- need to check
+
+    // Step 5: GET OUT OF CMD MODE
+    const char exit_cmd[] = "ATCN\r";
+    send_AT_cmd(exit_cmd, 5, unused, 0, 50);
+    HAL_Delay(100);
+      // Note: prob should wait for the "OK" in return 
+      // to confirm out of CMD mode
+    
+    // Step 6: Send the data so it can be wirelessly transmited
+    HAL_UART_Transmit(&huart2, exit_cmd, sizeof(exit_cmd), HAL_MAX_DELAY);
+    HAL_Delay(100);
+    HAL_UART_Transmit(&huart2, name, sizeof(name), HAL_MAX_DELAY);
+    HAL_Delay(100);
     return;
 }
 
@@ -583,7 +592,7 @@ void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_len
     // 1) Transmit the msg 
     for (int i = 0; i < tx_length; i++) {
         HAL_Delay(delay);
-        HAL_UART_Transmit(&huart2, (uint8_t *)&tx_msg[i], 1, HAL_MAX_DELAY);
+        HAL_UART_Transmit(&huart2, (uint8_t *)&tx_msg[i], 1, 100);
     }
 
     // 2) Receive the msg
