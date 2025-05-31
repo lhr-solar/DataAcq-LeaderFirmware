@@ -48,6 +48,8 @@
 CAN_HandleTypeDef hcan1;
 CAN_HandleTypeDef hcan3;
 
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim5;
 TIM_HandleTypeDef htim14;
 
 UART_HandleTypeDef huart5;
@@ -65,6 +67,8 @@ static void MX_CAN3_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_UART5_Init(void);
 static void MX_TIM14_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 void read_meta_data(void);
 void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length, uint32_t delay);
@@ -168,6 +172,8 @@ int main(void)
   MX_USART2_UART_Init();
   MX_UART5_Init();
   MX_TIM14_Init();
+  MX_TIM2_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
   CAN_FilterTypeDef filterConfig;
 
@@ -188,13 +194,15 @@ int main(void)
 
   HAL_CAN_Start(&hcan1);
   HAL_TIM_Base_Start(&htim14);
+  HAL_TIM_Base_Start(&htim2);
+  HAL_TIM_Base_Start(&htim5);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  uint8_t sof[] = " SOF:\n\r";
+  uint8_t sof[] = "SOF: \n\r";
 
   CAN_TxHeaderTypeDef   TxHeader;
   uint32_t              TxMailbox;  // which mailbox gets used is written here
@@ -207,7 +215,7 @@ int main(void)
   TxHeader.TransmitGlobalTime = DISABLE;
 
   uint8_t eof[] = " \n\r";
-  volatile uint16_t timer_val = 0;
+  volatile uint32_t timer_val = 0;
   uint8_t count = 0;
   char uartBuff[32];
   int uartBuffLen = 0;
@@ -217,41 +225,29 @@ int main(void)
   // HAL_Delay(10000);
   while (1)
   {
-      // 125 k 4 car
-      
-      HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
-      HAL_UART_Transmit(&huart2, sof, sizeof(sof), HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart5, sof, sizeof(sof), HAL_MAX_DELAY);
-      //cyc();
-      if (HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0))
-      {
-        // Retrieve the received message
-        if (HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &cu_packet.header, cu_packet.data) == HAL_OK){
-            HAL_UART_Transmit(&huart2, (uint8_t*)&cu_packet, sizeof(cu_packet), HAL_MAX_DELAY);
-            HAL_UART_Transmit(&huart2, eof, sizeof(eof), HAL_MAX_DELAY);
-        }
-      } else {
-          cyc();
-      }
 
-      timer_val = __HAL_TIM_GET_COUNTER(&htim14);
+      // Transmit Start of Frame:
+      // HAL_UART_Transmit(&huart2, sof, sizeof(sof), HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart2, sof, strlen((char*)sof), HAL_MAX_DELAY);
+
+      // Transmit Iteration Count: 
       count = (count + 1) % 255;
-      uartBuffLen = sprintf(uartBuff, "%i ", count);
+      uartBuffLen = sprintf(uartBuff, "Iteration: %u \n\r", count);
       HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart5, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      uartBuffLen = sprintf(uartBuff, "%u", timer_val);
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart2, eof, sizeof(eof), HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart5, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart5, eof, sizeof(eof), HAL_MAX_DELAY);
 
-      read_meta_data();
+      // Transmit tick count:
+      timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+      uint16_t period = ((timer_val / 100)&0xFFFF);
+      uartBuffLen = sprintf(uartBuff, "10ms Period Num: %u \n\r", period);
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+
+      cyc();
+      // read_meta_data();
 
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
-      HAL_Delay(100);
+      HAL_Delay(500);
 
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -379,6 +375,34 @@ static void MX_CAN3_Init(void)
 
 }
 
+static void MX_TIM2_Init(void)
+{
+  __HAL_RCC_TIM2_CLK_ENABLE();
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 48000 - 1;     // Divides 48 MHz down to 1 kHz (1 ms ticks)
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 0xFFFFFFFF;       // Max 32-bit
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK){Error_Handler();}
+}
+
+static void MX_TIM5_Init(void)
+{
+  __HAL_RCC_TIM5_CLK_ENABLE();
+  htim5.Instance = TIM5;
+  htim5.Init.Prescaler = 48000 - 1;    // 1 ms tick (48 MHz / 48000 = 1000 Hz)
+  htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim5.Init.Period = 0xFFFFFFFF;       // Max 32-bit
+  htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
+  {
+      Error_Handler();
+  }
+}
+
+
 /**
   * @brief TIM14 Initialization Function
   * @param None
@@ -395,7 +419,7 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 96-1;
+  htim14.Init.Prescaler = 48000 - 1;  // 10 ms per tick at 48 MHz clock
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim14.Init.Period = 65535;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
