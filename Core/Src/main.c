@@ -32,6 +32,18 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef struct __attribute__((__packed__)) {
+    CAN_RxHeaderTypeDef header;
+    uint8_t data[8];
+} CAN_UART_Packet;
+
+typedef struct __attribute__((__packed__)) {
+    uint16_t can_id;      // 0 to 0x7FF
+    uint16_t time_stamp;  // 10ms period (tim2)
+    uint8_t  num_bytes;   // 0 to 8 bytes of data
+    uint8_t  data[8];     // data payload
+} CAN_FORMATTED_Packet;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -72,6 +84,9 @@ static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 void read_meta_data(void);
 void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length, uint32_t delay);
+void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
+void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
+void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -129,12 +144,6 @@ void cyc(void){
     HAL_GPIO_WritePin(arr[(i+1)%11].GPIOx, arr[(i+1)%11].GPIO_PIN, GPIO_PIN_RESET);
     i = (i + 1) % 11;
 }
-
-// use as: (uint8_t*)packet
-typedef struct __attribute__((__packed__)) {
-    CAN_RxHeaderTypeDef header;
-    uint8_t data[8];
-} CAN_UART_Packet;
 
 /* USER CODE END 0 */
 
@@ -203,19 +212,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 
   uint8_t sof[] = "SOF: \n\r";
+  CAN_FORMATTED_Packet sof_msg;
 
-  CAN_TxHeaderTypeDef   TxHeader;
-  uint32_t              TxMailbox;  // which mailbox gets used is written here
-  uint8_t               TxData[8] = "daq :3\n\r";
-
-  TxHeader.StdId = 0x601;
-  TxHeader.RTR = CAN_RTR_DATA;
-  TxHeader.IDE = CAN_ID_STD;
-  TxHeader.DLC = 8;
-  TxHeader.TransmitGlobalTime = DISABLE;
-
-  uint8_t eof[] = " \n\r";
-  volatile uint32_t timer_val = 0;
   uint8_t count = 0;
   char uartBuff[32];
   int uartBuffLen = 0;
@@ -227,18 +225,13 @@ int main(void)
   {
 
       // Transmit Start of Frame:
-      // HAL_UART_Transmit(&huart2, sof, sizeof(sof), HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart2, sof, strlen((char*)sof), HAL_MAX_DELAY);
+      format_UART_Msg(sof, &sof_msg); // Re-format every time, to get updated time stamp
+      HAL_UART_Transmit(&huart2, (uint8_t*)&sof_msg, sizeof(sof_msg)-1, HAL_MAX_DELAY);
+      transmit_ASCII_CAN_Packet(&sof_msg);
 
       // Transmit Iteration Count: 
       count = (count + 1) % 255;
       uartBuffLen = sprintf(uartBuff, "Iteration: %u \n\r", count);
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-
-      // Transmit tick count:
-      timer_val = __HAL_TIM_GET_COUNTER(&htim2);
-      uint16_t period = ((timer_val / 100)&0xFFFF);
-      uartBuffLen = sprintf(uartBuff, "10ms Period Num: %u \n\r", period);
       HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
 
       cyc();
@@ -563,6 +556,58 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* msg){
+      char uartBuff[32];
+      int uartBuffLen = 0;
+      uartBuffLen = sprintf(uartBuff, "-------------------------\n\r");
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      uartBuffLen = sprintf(uartBuff, "CAN ID: 0x%X \n\r", msg->can_id);
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      uartBuffLen = sprintf(uartBuff, "Time Stamp: %u \n\r", msg->time_stamp);
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      uartBuffLen = sprintf(uartBuff, "Num Data Bytes: %u \n\r", msg->num_bytes);
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      uartBuffLen = sprintf(uartBuff, "Data: %s \n\r", msg->data);
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      uartBuffLen = sprintf(uartBuff, "-------------------------\n\r");
+      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+}
+
+
+// Expects ASCII msg (max 8 bytes)
+void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg){
+
+    // Data Acq CAN id
+    formatted_msg->can_id     = 0x300;
+      // Used by other systems: 1,2,4,5,6. Max = x7ff, so we will use 0x3XX
+
+    // 10 ms time stamp
+    volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+    uint16_t time_stamp = ((timer_val / 20)&0xFFFF); // 10ms
+    formatted_msg->time_stamp = time_stamp;
+
+    // Max of 8 bytes
+    formatted_msg->num_bytes  = strlen((char*)msg);
+    if(formatted_msg->num_bytes > 8){formatted_msg->num_bytes = 8;}
+
+    // Copy the data package over
+    for(int i = 0; i < 8; i ++){
+      formatted_msg->data[i]  = (uint8_t)(msg[i]);
+    }
+}
+
+// Turn raw recieved can into formated CAN
+void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp){
+
+    formatted_msg->can_id     = rx_msg->header.StdId;
+    formatted_msg->time_stamp = time_stamp;
+    formatted_msg->num_bytes  = rx_msg->header.DLC;
+
+    for(int i = 0; i < 8; i ++){
+      formatted_msg->data[i]  = rx_msg->data[i];
+    }
+}
 
 void read_meta_data(void){
     // XBee needs 1 second of silence before and after sending "+++"
