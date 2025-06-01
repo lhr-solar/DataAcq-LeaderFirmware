@@ -359,19 +359,24 @@ int main(void)
       while (1) {
           // Go through all CAN ID and send dummy data
           for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
-              // Make up dummy_data:
-              volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
-              dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
+              // Flow control: 
+              GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+              if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+              else{
+                  // Make up dummy_data:
+                  volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+                  dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
 
-              // Format into SLCAN: 
-              format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
+                  // Format into SLCAN: 
+                  format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
 
-              // Send and stall 1ms
-              HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
-              HAL_Delay(1);
+                  // Send and stall 
+                  HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
+                  HAL_Delay(5);
+              }
           }
       }
-
+      
 
       cyc();
       read_meta_data();
@@ -688,6 +693,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  // RF NCTS Flow Control
+  // Now, configure PA8 as input (separate setup)
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP; // Default to 1 = NO SENDING (prob safer = no data loss) 
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  // LTE NCTS Flow Control
+  // Now, configure PA9 as input (separate setup)
+  GPIO_InitStruct.Pin = GPIO_PIN_9;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP; // Default to 1 = NO SENDING (prob safer = no data loss) 
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
