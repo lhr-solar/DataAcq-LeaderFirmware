@@ -44,6 +44,14 @@ typedef struct __attribute__((__packed__)) {
     uint8_t  data[8];     // data payload
 } CAN_FORMATTED_Packet;
 
+// SLCAN shit 
+typedef struct {
+    const char* name;
+    uint16_t can_id;   // ASCII version of CAN ID
+    uint8_t  length;       // in bytes
+    uint8_t  index_used;   // 1 if index used, 0 otherwise
+} CANSignal;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -78,6 +86,91 @@ volatile uint16_t fifo_head = 0;
 volatile uint16_t fifo_tail = 0;
 // -----------------------------
 
+// SLCAN shit 
+// ------------------------------------------------------------------------------------------------
+#define SLCAN_MAX_STRING_LEN 32  // Enough for 't' + 3 (id) + 1 (dlc) + 16 (data) + 1 (\r) + 1 (\0)
+CANSignal can_signals[] = {
+    // Controls.csv
+    { "CONTROL_MODE",                         0x580,  1, 0 },
+    { "Motor Precharge Enable",               0x582,  1, 0 },
+    { "IO_STATE",                             0x581,  3, 0 },
+    { "Controls_Fault",                       0x583,  1, 0 },
+    { "Motor Controller Safe",                0x584,  1, 0 },
+    { "Motor Controller Identification",      0x240,  8, 0 },
+    { "Motor Status",                         0x241,  8, 0 },
+    { "Motor Controller Bus",                 0x242,  8, 0 },
+    { "Velocity",                             0x243,  8, 0 },
+    { "Motor Controller Phase Current",       0x244,  8, 0 },
+    { "Motor Voltage Vector",                 0x245,  8, 0 },
+    { "Motor Current Vector",                 0x246,  8, 0 },
+    { "Motor BackEMF",                        0x247,  8, 0 },
+    { "Low Voltage Rail Measurement",         0x248,  8, 0 },
+    { "DSP Voltage Rail Measurement",         0x249,  8, 0 },
+    { "Reserved",                             0x24A,  8, 0 },
+    { "Motor Temperature",                    0x24B,  8, 0 },
+    { "DSP Board Temperature",                0x24C,  8, 0 },
+    { "Reserved",                             0x24D,  8, 0 },
+    { "Odometer / Bus Amp Hours",             0x24E,  8, 0 },
+    { "Slip Speed Measurement",               0x257,  8, 0 },
+    // Shared.csv
+    { "Dash Kill Switch",                     0x001,  1, 0 },
+    { "Any System Failures",                  0x003,  1, 0 },
+    { "Ignition",                             0x004,  1, 0 },
+    { "Any System Shutoff",                   0x005,  1, 0 },
+    // BPS.CSV
+    { "BPS Trip",                             0x002,  1, 0 },
+    { "BPS All Clear",                        0x101,  1, 0 },
+    { "BPS Contactor State",                  0x102,  1, 0 },
+    { "Current Data",                         0x103,  4, 0 },
+    { "Voltage Data Array",                   0x104,  5, 1 },
+    { "Temperature Data Array",               0x105,  5, 1 },
+    { "State of Charge Data",                 0x106,  4, 0 },
+    { "WDog Triggered",                       0x107,  1, 0 },
+    { "CAN Error",                            0x108,  1, 0 },
+    { "BPS Command msg",                      0x109,  8, 0 },
+    { "Supplemental Voltage",                 0x10B,  2, 0 },
+    { "Charging Enabled",                     0x10C,  1, 0 },
+    { "Voltage Summary",                      0x10D,  8, 0 },
+    { "Temperature Summary",                  0x10E,  8, 0 },
+    { "BPS Fault State",                      0x10F,  1, 0 },
+    // Blackbody.csv
+    { "Heartbeat (BPS)",                      0x650,  1, 0 },
+    { "Set Mode (BPS)",                       0x651,  1, 0 },
+    { "Board Fault (MPPT)",                   0x652,  2, 0 },
+    { "Acknowledge Fault (MPPT)",             0x653,  1, 0 },
+    { "Temperature Sensor Configure",         0x654,  3, 0 },
+    { "Irradiance Sensor Configure",          0x655,  3, 0 },
+    { "Temperature Measurement",              0x656,  5, 0 },
+    { "Irradiance Measurement",               0x657,  5, 0 },
+    // Contactors.csv
+    { "Contactor Sense",                      0x400,  2, 0 },
+    { "Precharge Timeout",                    0x401,  1, 0 },
+    // Sunscatter.csv
+    { "Heartbeat (Controller)",               0x600,  1, 0 },
+    { "Set Mode; BOARD OVERRIDE ENABLE",      0x601,  1, 0 },
+    { "Board Fault (Controller)",             0x602,  2, 0 },
+    { "Acknowledge Fault (Controller)",       0x603,  1, 0 },
+    { "Sensor Configure",                     0x604,  5, 0 },
+    { "Sensor Configure 2",                   0x605,  5, 0 },
+    { "Sensor Configure 3",                   0x606,  5, 0 },
+    { "Controller Configure",                 0x607,  0, 0 },
+    { "Debug Configure",                      0x608,  1, 0 },
+    { "Operating Setpoint",                   0x609,  8, 0 },
+    { "Input Voltage Measurement",            0x60A,  4, 0 },
+    { "Input Current Measurement",            0x60B,  4, 0 },
+    { "Output Voltage Measurement",           0x60C,  4, 0 },
+    { "Output Current Measurement",           0x60D,  4, 0 },
+    // TPEE.csv
+    { "MPPT A Status",                        0x201,  5, 0 },
+    { "MPPT A Boost Enable",                  0x209,  1, 0 },
+    { "MPPT B Status",                        0x211,  5, 0 },
+    { "MPPT B Boost Enable",                  0x219,  1, 0 }
+};
+
+#define CAN_SIGNAL_COUNT (sizeof(can_signals) / sizeof(CANSignal))
+// ------------------------------------------------------------------------------------------------
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -97,6 +190,8 @@ void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
 void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
 void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
 int  UART_FIFO_get_Char(char* rx_char);
+uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
+uint32_t tx_msg_len(char* tx_msg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -251,6 +346,32 @@ int main(void)
       count = (count + 1) % 255;
       uartBuffLen = sprintf(uartBuff, "Iteration: %u \n\r", count);
       HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+
+      // SLCAN Testing: 
+      char slcan_str[SLCAN_MAX_STRING_LEN] = {0};
+      uint8_t data[8] = {0x01, 0x02, 0xAA, 0xFF};
+      format_slcan_frame(0x123, data, 4, slcan_str); // slcan_str now contains: "t12340102AAFF\r"
+      HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str, tx_msg_len(slcan_str), HAL_MAX_DELAY);
+
+      // Infinate SLCAN: 
+      char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
+      uint8_t dummy_data;
+      while (1) {
+          // Go through all CAN ID and send dummy data
+          for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
+              // Make up dummy_data:
+              volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+              dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
+
+              // Format into SLCAN: 
+              format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
+
+              // Send and stall 1ms
+              HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
+              HAL_Delay(1);
+          }
+      }
+
 
       cyc();
       read_meta_data();
@@ -752,6 +873,44 @@ uint32_t send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx
     // Return number of bytes put into RXdata
     return index;
 
+}
+
+// can_id   = [0, x7FF]
+// data     = Max 8 bytes 
+// dlc      = num bytes of data 
+// out_str  = return str
+// return   = 1 on success, 0 on fail
+uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str) {
+    if (can_id > 0x7FF || dlc > 8 || out_str == NULL) {
+        strcpy(out_str, ""); // Clear output on invalid input
+        return 0;
+    }
+
+    // Start the frame with 't' and CAN ID
+    sprintf(out_str, "t%03X%X", can_id, dlc);
+
+    // Append each data byte as two hex characters
+    for (uint8_t i = 0; i < dlc; i++) {
+        char byte_str[3];
+        sprintf(byte_str, "%02X", data[i]);
+        strcat(out_str, byte_str);
+    }
+
+    // Append carriage return
+    strcat(out_str, "\r");
+
+    // Sucess 
+    return 1;
+}
+
+// Figure out the len of a TX MSG by looking for \r 
+uint32_t tx_msg_len(char* tx_msg){
+    uint32_t index = 0;
+    while(1){
+        if(tx_msg[index] == 0){return 0;}           // Failed to find \r
+        if(tx_msg[index] == '\r'){return index+1;}  // Determined len
+        index ++;
+    }
 }
 
 
