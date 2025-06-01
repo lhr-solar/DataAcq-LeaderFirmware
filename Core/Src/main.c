@@ -92,7 +92,7 @@ static void MX_TIM2_Init(void);
 static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 void read_meta_data(void);
-void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length, uint32_t delay);
+uint32_t send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length);
 void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
 void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
 void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
@@ -670,35 +670,55 @@ void read_meta_data(void){
     // Step 1: Enter AT command mode by sending "+++"
     const char enter_cmd[] = "+++";
     volatile char ok_enter[4] = {0}; 
-    send_AT_cmd(enter_cmd, 3, ok_enter, 3, 20);
+    send_AT_cmd(enter_cmd, 3, ok_enter, 3);
 
     // Step 2: Check its an "OK" response
     if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
     else{return;} // get out
 
     // Step 3: Actually get the data we want :)
+    // ----------------------------------------------------------------
+    // Name:
     const char cmd1[] = "ATNI\r";
-    volatile char name[8] = {0}; // Empty arr to take name
-    send_AT_cmd(cmd1, 5, name, 7, 30);
+    volatile char name[8] = {0}; // Always 7 char (6 char, 1 \r)
+    send_AT_cmd(cmd1, 5, name, 7);
     name[6] = '\n'; 
     name[7] = '\r'; 
+
+    // Bytes Transmited
+    const char cmd2[] = "ATBC\r";
+    volatile char bytes[10] = {0}; // Max 9 char (8 hex, 1 \r)
+    uint32_t num_bytes_rx = send_AT_cmd(cmd2, 5, bytes, 9);
+    bytes[num_bytes_rx-1] = '\n';
+    bytes[num_bytes_rx] = '\r';
+
+    // Transmision Failure Count
+    const char cmd3[] = "ATTR\r";
+    volatile char fails[6] = {0}; // Max 5 char (4 hex, 1 \r)
+    uint32_t num_fails_rx = send_AT_cmd(cmd3, 5, fails, 5);
+      // 0\n
+    fails[num_fails_rx-1] = '\n';
+    fails[num_fails_rx] = '\r';
+    // ----------------------------------------------------------------
 
     // Step 4: GET OUT OF CMD MODE
     const char exit_cmd[] = "ATCN\r";
     volatile char ok_exit[4] = {0}; 
-    send_AT_cmd(exit_cmd, 5, ok_exit, 3, 50);
+    send_AT_cmd(exit_cmd, 5, ok_exit, 3);
 
     // Step 5: Check its an "OK" response
     if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
     else{HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
     
     // Step 6: Send the data so it can be wirelessly transmited
-    HAL_UART_Transmit(&huart2, name, sizeof(name), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart2, name, 8, HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart2, bytes, num_bytes_rx+1, HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart2, fails, num_fails_rx+1, HAL_MAX_DELAY);
     return;
 }
 
 // rx_length INCLUDES the \r at the end of the msg 
-void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length, uint32_t delay){
+uint32_t send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length){
 
     // 1) Transmit the msg 
     for (int i = 0; i < tx_length; i++) {
@@ -724,7 +744,13 @@ void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_len
           rx_msg[index] = RXdata;
           index ++;
         }
+
+        // Break if got a '\r' (after adding it to rx_msg)
+        if(RXdata == '\r'){break;}
     }
+
+    // Return number of bytes put into RXdata
+    return index;
 
 }
 
