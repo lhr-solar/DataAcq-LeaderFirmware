@@ -69,6 +69,15 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
+// For UART2 Reception 
+// -----------------------------
+volatile uint8_t rx_buffer;
+#define FIFO_SIZE 64  
+volatile uint8_t fifo[FIFO_SIZE];
+volatile uint16_t fifo_head = 0;
+volatile uint16_t fifo_tail = 0;
+// -----------------------------
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -87,6 +96,7 @@ void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_len
 void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
 void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
 void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
+int  UART_FIFO_get_Char(char* rx_char);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -206,12 +216,15 @@ int main(void)
   HAL_TIM_Base_Start(&htim2);
   HAL_TIM_Base_Start(&htim5);
 
+  // NOTE: ############ Very important for UART2 ISR reception ################
+  __enable_irq();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  uint8_t sof[] = "SOF: \n\r";
+  uint8_t sof[] = "SOF:\n\r";
   CAN_FORMATTED_Packet sof_msg;
 
   uint8_t count = 0;
@@ -219,6 +232,11 @@ int main(void)
   int uartBuffLen = 0;
 
   CAN_UART_Packet cu_packet;
+
+  // Supposedly needed for UART 2 Rx
+  HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
+
 
   // HAL_Delay(10000);
   while (1)
@@ -235,7 +253,7 @@ int main(void)
       HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
 
       cyc();
-      // read_meta_data();
+      read_meta_data();
 
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
       HAL_Delay(500);
@@ -557,6 +575,39 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART2) {
+        // Put RX byte into circular SW FIFO
+        uint16_t next_head = (fifo_head + 1) % FIFO_SIZE;
+        if (next_head != fifo_tail) {  // Check for overflow
+            fifo[fifo_head] = rx_buffer;
+            fifo_head = next_head;
+        } else {
+          cyc();
+        }
+        // Re-enable interrupt for next byte
+        HAL_UART_Receive_IT(&huart2, &rx_buffer, 1);
+    }
+}
+
+void USART2_IRQHandler(void)
+{
+    HAL_UART_IRQHandler(&huart2);
+}
+
+// Returns 1 = SUCCESS
+// Returns 0 = FAIL
+int UART_FIFO_get_Char(char* rx_char) {
+    if (fifo_head == fifo_tail) {
+        return 0;  // FIFO empty
+    }
+
+    // Non empty:
+    *rx_char = fifo[fifo_tail];
+    fifo_tail = (fifo_tail + 1) % FIFO_SIZE;
+    return 1;
+}
+
 void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* msg){
       char uartBuff[32];
       int uartBuffLen = 0;
@@ -613,45 +664,63 @@ void read_meta_data(void){
     // XBee needs 1 second of silence before and after sending "+++"
     HAL_Delay(1001); 
 
+    // Step 0: Arm reception of UART2 data
+    HAL_UART_Receive_IT(&huart2, &rx_buffer, 1);  // Receive 1 byte via interrupt
+
     // Step 1: Enter AT command mode by sending "+++"
     const char enter_cmd[] = "+++";
     char* unused;
     send_AT_cmd(enter_cmd, 3, unused, 0, 20);
 
     // Step 2: Wait for "OK" response
-    volatile uint8_t RXdataOne = 0;
-    volatile uint8_t RXdataTwo = 0;
-    HAL_UART_Receive(&huart2, &RXdataOne, 1, 1500);
-    HAL_UART_Receive(&huart2, &RXdataTwo, 1, 500);
-   
-    // Step 3: If NO Okay return error     
-    if( (RXdataOne != 79) || (RXdataTwo != 75)) {return;}
-
-    // DEBUG 
-    for(int i = 0; i < 10; i ++){
-      cyc();
-      HAL_Delay(50);
+    char read_char = 0;
+    int done = 0;
+    while(done != 2){
+        if(UART_FIFO_get_Char(&read_char)){
+          if(read_char == 'O'){done = 1;}
+          if( (read_char == 'K') && (done == 1) ){done = 2;}
+        }
     }
 
-    // Step 4: Actually get the data we want :)
-    const char cmd1[] = "ATNI\r";
-    volatile char name[9] = {0}; // Empty arr to take name
-    send_AT_cmd(cmd1, 5, name, 7, 30);
-    name[7] = '\n'; 
-      // Note sure if they send a CR at the end -- need to check
+    // SPIN - DEBUGING
+    while(1){
+      cyc();
+      HAL_Delay(100);
+    }
 
-    // Step 5: GET OUT OF CMD MODE
-    const char exit_cmd[] = "ATCN\r";
-    send_AT_cmd(exit_cmd, 5, unused, 0, 50);
-    HAL_Delay(100);
-      // Note: prob should wait for the "OK" in return 
-      // to confirm out of CMD mode
+    // volatile uint8_t RXdataOne = 0;
+    // volatile uint8_t RXdataTwo = 0;
+    // HAL_UART_Receive(&huart2, &RXdataOne, 1, 1500);
+    // HAL_UART_Receive(&huart2, &RXdataTwo, 1, 500);
+   
+    // // Step 3: If NO Okay return error     
+    // if( (RXdataOne != 79) || (RXdataTwo != 75)) {return;}
+
+    // // DEBUG 
+    // for(int i = 0; i < 10; i ++){
+    //   cyc();
+    //   HAL_Delay(50);
+    // }
+
+    // // Step 4: Actually get the data we want :)
+    // const char cmd1[] = "ATNI\r";
+    // volatile char name[9] = {0}; // Empty arr to take name
+    // send_AT_cmd(cmd1, 5, name, 7, 30);
+    // name[7] = '\n'; 
+    //   // Note sure if they send a CR at the end -- need to check
+
+    // // Step 5: GET OUT OF CMD MODE
+    // const char exit_cmd[] = "ATCN\r";
+    // send_AT_cmd(exit_cmd, 5, unused, 0, 50);
+    // HAL_Delay(100);
+    //   // Note: prob should wait for the "OK" in return 
+    //   // to confirm out of CMD mode
     
-    // Step 6: Send the data so it can be wirelessly transmited
-    HAL_UART_Transmit(&huart2, exit_cmd, sizeof(exit_cmd), HAL_MAX_DELAY);
-    HAL_Delay(100);
-    HAL_UART_Transmit(&huart2, name, sizeof(name), HAL_MAX_DELAY);
-    HAL_Delay(100);
+    // // Step 6: Send the data so it can be wirelessly transmited
+    // HAL_UART_Transmit(&huart2, exit_cmd, sizeof(exit_cmd), HAL_MAX_DELAY);
+    // HAL_Delay(100);
+    // HAL_UART_Transmit(&huart2, name, sizeof(name), HAL_MAX_DELAY);
+    // HAL_Delay(100);
     return;
 }
 
