@@ -224,7 +224,7 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  uint8_t sof[] = "SOF:\n\r";
+  uint8_t sof[] = "SOF:  \n\r"; // 8 bytes to fit can formated packet dimensions
   CAN_FORMATTED_Packet sof_msg;
 
   uint8_t count = 0;
@@ -244,7 +244,7 @@ int main(void)
 
       // Transmit Start of Frame:
       format_UART_Msg(sof, &sof_msg); // Re-format every time, to get updated time stamp
-      HAL_UART_Transmit(&huart2, (uint8_t*)&sof_msg, sizeof(sof_msg)-1, HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart2, (uint8_t*)&sof_msg, sizeof(sof_msg), HAL_MAX_DELAY);
       transmit_ASCII_CAN_Packet(&sof_msg);
 
       // Transmit Iteration Count: 
@@ -669,75 +669,61 @@ void read_meta_data(void){
 
     // Step 1: Enter AT command mode by sending "+++"
     const char enter_cmd[] = "+++";
-    char* unused;
-    send_AT_cmd(enter_cmd, 3, unused, 0, 20);
+    volatile char ok_enter[4] = {0}; 
+    send_AT_cmd(enter_cmd, 3, ok_enter, 3, 20);
 
-    // Step 2: Wait for "OK" response
-    char read_char = 0;
-    int done = 0;
-    while(done != 2){
-        if(UART_FIFO_get_Char(&read_char)){
-          if(read_char == 'O'){done = 1;}
-          if( (read_char == 'K') && (done == 1) ){done = 2;}
-        }
-    }
+    // Step 2: Check its an "OK" response
+    if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
+    else{return;} // get out
 
-    // SPIN - DEBUGING
-    while(1){
-      cyc();
-      HAL_Delay(100);
-    }
+    // Step 3: Actually get the data we want :)
+    const char cmd1[] = "ATNI\r";
+    volatile char name[8] = {0}; // Empty arr to take name
+    send_AT_cmd(cmd1, 5, name, 7, 30);
+    name[6] = '\n'; 
+    name[7] = '\r'; 
 
-    // volatile uint8_t RXdataOne = 0;
-    // volatile uint8_t RXdataTwo = 0;
-    // HAL_UART_Receive(&huart2, &RXdataOne, 1, 1500);
-    // HAL_UART_Receive(&huart2, &RXdataTwo, 1, 500);
-   
-    // // Step 3: If NO Okay return error     
-    // if( (RXdataOne != 79) || (RXdataTwo != 75)) {return;}
+    // Step 4: GET OUT OF CMD MODE
+    const char exit_cmd[] = "ATCN\r";
+    volatile char ok_exit[4] = {0}; 
+    send_AT_cmd(exit_cmd, 5, ok_exit, 3, 50);
 
-    // // DEBUG 
-    // for(int i = 0; i < 10; i ++){
-    //   cyc();
-    //   HAL_Delay(50);
-    // }
-
-    // // Step 4: Actually get the data we want :)
-    // const char cmd1[] = "ATNI\r";
-    // volatile char name[9] = {0}; // Empty arr to take name
-    // send_AT_cmd(cmd1, 5, name, 7, 30);
-    // name[7] = '\n'; 
-    //   // Note sure if they send a CR at the end -- need to check
-
-    // // Step 5: GET OUT OF CMD MODE
-    // const char exit_cmd[] = "ATCN\r";
-    // send_AT_cmd(exit_cmd, 5, unused, 0, 50);
-    // HAL_Delay(100);
-    //   // Note: prob should wait for the "OK" in return 
-    //   // to confirm out of CMD mode
+    // Step 5: Check its an "OK" response
+    if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
+    else{HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
     
-    // // Step 6: Send the data so it can be wirelessly transmited
-    // HAL_UART_Transmit(&huart2, exit_cmd, sizeof(exit_cmd), HAL_MAX_DELAY);
-    // HAL_Delay(100);
-    // HAL_UART_Transmit(&huart2, name, sizeof(name), HAL_MAX_DELAY);
-    // HAL_Delay(100);
+    // Step 6: Send the data so it can be wirelessly transmited
+    HAL_UART_Transmit(&huart2, name, sizeof(name), HAL_MAX_DELAY);
     return;
 }
 
-
+// rx_length INCLUDES the \r at the end of the msg 
 void send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length, uint32_t delay){
 
     // 1) Transmit the msg 
     for (int i = 0; i < tx_length; i++) {
-        HAL_Delay(delay);
-        HAL_UART_Transmit(&huart2, (uint8_t *)&tx_msg[i], 1, 100);
+        HAL_Delay(20);
+        HAL_UART_Transmit(&huart2, (uint8_t *)&tx_msg[i], 1, HAL_MAX_DELAY);
     }
 
     // 2) Receive the msg
-    volatile uint8_t RXdata = 0; // start as invalid value
-    for (int i = 0; i < rx_length; i++) {
-        HAL_UART_Receive(&huart2, &RXdata, 1, 500);
-        rx_msg[i] = (char)RXdata;
+    volatile char RXdata = 0; // start as invalid value
+    uint32_t index = 0;
+    uint32_t iterations = 0;
+    const uint32_t MAX_ITERATIONS = 48000000;  // ~15 sec
+    while(1){
+        // Break when collected rx_length bytes
+        if(index == rx_length){break;}
+
+        // Break if reach max iterations
+        if(iterations >= MAX_ITERATIONS){break;}
+        iterations++;
+
+        // Collect data bytes
+        if(UART_FIFO_get_Char(&RXdata)){
+          rx_msg[index] = RXdata;
+          index ++;
+        }
     }
 
 }
