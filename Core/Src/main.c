@@ -289,24 +289,27 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
-  CAN_FilterTypeDef filterConfig;
 
+  // CAN Filter: 
+  // ----------------------------------------------
+  CAN_FilterTypeDef filterConfig;
   filterConfig.FilterIdHigh = 0x0000;
   filterConfig.FilterIdLow  = 0x0000;
-
   filterConfig.FilterMaskIdHigh = 0x0000;
   filterConfig.FilterMaskIdLow  = 0x0000;
-
   filterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
   filterConfig.FilterBank = 0;
   filterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
   filterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
   filterConfig.FilterActivation = ENABLE;
   filterConfig.SlaveStartFilterBank = 0;
-
   HAL_CAN_ConfigFilter(&hcan1, &filterConfig);
+  // ----------------------------------------------
 
+  // Start CAN1
   HAL_CAN_Start(&hcan1);
+
+  // Start TIMs
   HAL_TIM_Base_Start(&htim14);
   HAL_TIM_Base_Start(&htim2);
   HAL_TIM_Base_Start(&htim5);
@@ -328,10 +331,17 @@ int main(void)
 
   CAN_UART_Packet cu_packet;
 
-  // Supposedly needed for UART 2 Rx
+  // Set Priority level and enable IRS for UART2 RX 
   HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(USART2_IRQn);
 
+  // Set Priority level and enable IRS for CAN1 RX 
+  HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
+    // Note: "RX0" == Use FIFO0 (there is also a FIFO1)
+
+  // Enable RX interrupt
+  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
   // HAL_Delay(10000);
   while (1)
@@ -714,6 +724,25 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+    CAN_RxHeaderTypeDef rxHeader;
+    uint8_t rxData[8];
+
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
+    {
+        while(1){
+          cyc();
+          HAL_DELAY(100);
+        }
+    }
+}
+
+void CAN1_RX0_IRQHandler(void)
+{
+    HAL_CAN_IRQHandler(&hcan1); // HAL handles it, then calls your callback
+}
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == USART2) {
