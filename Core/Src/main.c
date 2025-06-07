@@ -378,14 +378,14 @@ int main(void)
       format_slcan_frame(0x123, data, 4, slcan_str); // slcan_str now contains: "t12340102AAFF\r"
       HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str, tx_msg_len(slcan_str), HAL_MAX_DELAY);
 
-      // Infinate SLCAN: 
+      // Infinate SLCAN to Xbee LTE: 
       char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
       uint8_t dummy_data;
       while (1) {
           // Go through all CAN ID and send dummy data
           for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
               // Flow control: 
-              GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+              GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
               if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
               else{
                   // Make up dummy_data:
@@ -396,11 +396,35 @@ int main(void)
                   format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
 
                   // Send and stall 
-                  HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
-                  HAL_Delay(5);
+                  HAL_UART_Transmit(&huart5, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
+                  HAL_Delay(10000);
               }
           }
       }
+
+      // // Infinate SLCAN to Xbee RF: 
+      // char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
+      // uint8_t dummy_data;
+      // while (1) {
+      //     // Go through all CAN ID and send dummy data
+      //     for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
+      //         // Flow control: 
+      //         GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+      //         if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+      //         else{
+      //             // Make up dummy_data:
+      //             volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+      //             dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
+
+      //             // Format into SLCAN: 
+      //             format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
+
+      //             // Send and stall 
+      //             HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
+      //             HAL_Delay(5);
+      //         }
+      //     }
+      // }
 
       // CAN1 -> XBee RF: (CAN is put in SLCAN SW FIFO) this gets from SLCAN SW FIFO and sends to RF Module
       // ################################## HAS NOT BEEN TESTED ##########################################
