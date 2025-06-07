@@ -44,13 +44,20 @@ typedef struct __attribute__((__packed__)) {
     uint8_t  data[8];     // data payload
 } CAN_FORMATTED_Packet;
 
-// SLCAN shit 
+// Defining the can singals 
+#define SLCAN_MAX_STRING_LEN 32  // Enough for 't' + 3 (id) + 1 (dlc) + 16 (data) + 1 (\r) + 1 (\0)
 typedef struct {
     const char* name;
     uint16_t can_id;   // ASCII version of CAN ID
     uint8_t  length;       // in bytes
     uint8_t  index_used;   // 1 if index used, 0 otherwise
 } CANSignal;
+
+// SLCAN shit 
+typedef struct {
+    char slcanmsg[SLCAN_MAX_STRING_LEN];
+    uint32_t length;
+} SLCAN;
 
 /* USER CODE END PTD */
 
@@ -86,9 +93,16 @@ volatile uint16_t fifo_head = 0;
 volatile uint16_t fifo_tail = 0;
 // -----------------------------
 
+// For CAN1 Reception (slcan)
+// -----------------------------
+#define CAN_FIFO_SIZE 256 // 256 SL-CAN Msgs
+volatile SLCAN can_fifo[CAN_FIFO_SIZE];
+volatile uint16_t can_fifo_head = 0;
+volatile uint16_t can_fifo_tail = 0;
+// -----------------------------
+
 // SLCAN shit 
 // ------------------------------------------------------------------------------------------------
-#define SLCAN_MAX_STRING_LEN 32  // Enough for 't' + 3 (id) + 1 (dlc) + 16 (data) + 1 (\r) + 1 (\0)
 CANSignal can_signals[] = {
     // Controls.csv
     { "CONTROL_MODE",                         0x580,  1, 0 },
@@ -192,6 +206,7 @@ void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
 int  UART_FIFO_get_Char(char* rx_char);
 uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
 uint32_t tx_msg_len(char* tx_msg);
+uint8_t can_fifo_pop(SLCAN* poped_msg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -384,6 +399,27 @@ int main(void)
                   HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
                   HAL_Delay(5);
               }
+          }
+      }
+
+      // CAN1 -> XBee RF: (CAN is put in SLCAN SW FIFO) this gets from SLCAN SW FIFO and sends to RF Module
+      // ################################## HAS NOT BEEN TESTED ##########################################
+      // ################################## HAS NOT BEEN TESTED ##########################################
+      // ################################## HAS NOT BEEN TESTED ##########################################
+      while(1) {
+          // Flow control: 
+          GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+          if (NCTS == GPIO_PIN_SET) {cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+          else{
+              // Pop from CAN1 SL-CAN SW FIFO
+              SLCAN poped_msg;
+              if(can_fifo_pop(&poped_msg)){
+                  if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, poped_msg.length, HAL_MAX_DELAY) != HAL_OK){
+                    cyc(); // UART tx failed for some reason idk man
+                    // NOTE: right now if this happens the tx msg is just discarded
+                  }
+              }
+              else{cyc();} // Failed to pop
           }
       }
       
@@ -725,17 +761,39 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+// 0 = Fail
+// 1 = Win
+// Pop from the CAN1 (car can) SW FIFO
+uint8_t can_fifo_pop(SLCAN* poped_msg) {
+    if (can_fifo_head == can_fifo_tail) {
+        // Buffer is empty
+        return 0;
+    }
+
+    *poped_msg = can_fifo[can_fifo_tail];
+    can_fifo_tail = (can_fifo_tail + 1) % CAN_FIFO_SIZE;
+    return 1;
+}
+
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
+    // Values populated by HAL_CAN_GetRxMessage:
     CAN_RxHeaderTypeDef rxHeader;
     uint8_t rxData[8];
 
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
     {
-        while(1){
-          cyc();
-          HAL_DELAY(100);
+        uint16_t next_head = (can_fifo_head + 1) % CAN_FIFO_SIZE;
+        // Put in fifo, drop if full
+        if (next_head != can_fifo_tail) {
+            // Format, drop if fail
+            if(format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, can_fifo[can_fifo_head].slcanmsg)){
+                can_fifo[can_fifo_head].length = tx_msg_len(can_fifo[can_fifo_head].slcanmsg);
+                can_fifo_head = next_head;  // only "put" in fifo, if format success
+            }
+            else{cyc();}  // Failed format
         }
+        else{cyc();}  // FIFO full
     }
 }
 
