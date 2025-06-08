@@ -198,8 +198,8 @@ static void MX_TIM14_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
-void read_meta_data(void);
-uint32_t send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length);
+void read_meta_data(UART_HandleTypeDef* huart_ptr, uint8_t LTE);
+uint32_t send_AT_cmd(UART_HandleTypeDef* huart_ptr, char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length);
 void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
 void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
 void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
@@ -350,6 +350,10 @@ int main(void)
   HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(USART2_IRQn);
 
+  // Set Priority level and enable IRS for UART5 RX 
+  HAL_NVIC_SetPriority(UART5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(UART5_IRQn);
+
   // Set Priority level and enable IRS for CAN1 RX 
   HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
@@ -378,6 +382,12 @@ int main(void)
       format_slcan_frame(0x123, data, 4, slcan_str); // slcan_str now contains: "t12340102AAFF\r"
       HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str, tx_msg_len(slcan_str), HAL_MAX_DELAY);
 
+      // Testing LTE read meta data
+      while(1){
+          read_meta_data(&huart5, 1);
+          HAL_Delay(1000);
+      }
+
       // Infinate SLCAN to Xbee LTE: 
       char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
       uint8_t dummy_data;
@@ -397,7 +407,7 @@ int main(void)
 
                   // Send and stall 
                   HAL_UART_Transmit(&huart5, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
-                  HAL_Delay(10000);
+                  HAL_Delay(1000);
               }
           }
       }
@@ -449,7 +459,7 @@ int main(void)
       
 
       cyc();
-      read_meta_data();
+      read_meta_data(&huart2, 0);
 
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
       HAL_Delay(500);
@@ -827,7 +837,7 @@ void CAN1_RX0_IRQHandler(void)
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    if (huart->Instance == USART2) {
+    if ( (huart->Instance == USART2) || (huart->Instance == UART5)) {
         // Put RX byte into circular SW FIFO
         uint16_t next_head = (fifo_head + 1) % FIFO_SIZE;
         if (next_head != fifo_tail) {  // Check for overflow
@@ -837,8 +847,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
           cyc();
         }
         // Re-enable interrupt for next byte
-        HAL_UART_Receive_IT(&huart2, &rx_buffer, 1);
+        HAL_UART_Receive_IT(huart, &rx_buffer, 1);
     }
+}
+
+void UART5_IRQHandler(void)
+{
+    HAL_UART_IRQHandler(&huart5);
 }
 
 void USART2_IRQHandler(void)
@@ -911,17 +926,17 @@ void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, 
     }
 }
 
-void read_meta_data(void){
+void read_meta_data(UART_HandleTypeDef* huart_ptr, uint8_t LTE){
     // XBee needs 1 second of silence before and after sending "+++"
     HAL_Delay(1001); 
 
     // Step 0: Arm reception of UART2 data
-    HAL_UART_Receive_IT(&huart2, &rx_buffer, 1);  // Receive 1 byte via interrupt
+    HAL_UART_Receive_IT(huart_ptr, &rx_buffer, 1);  // Receive 1 byte via interrupt
 
     // Step 1: Enter AT command mode by sending "+++"
     const char enter_cmd[] = "+++";
     volatile char ok_enter[4] = {0}; 
-    send_AT_cmd(enter_cmd, 3, ok_enter, 3);
+    send_AT_cmd(huart_ptr, enter_cmd, 3, ok_enter, 3);
 
     // Step 2: Check its an "OK" response
     if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
@@ -929,52 +944,70 @@ void read_meta_data(void){
 
     // Step 3: Actually get the data we want :)
     // ----------------------------------------------------------------
-    // Name:
+
+    const char cmd1_lte[] = "ATDB\r";
+    volatile char singal[5] = {0}; // Always 3 char (2 char, 1 \r)
     const char cmd1[] = "ATNI\r";
     volatile char name[8] = {0}; // Always 7 char (6 char, 1 \r)
-    send_AT_cmd(cmd1, 5, name, 7);
-    name[6] = '\n'; 
-    name[7] = '\r'; 
-
-    // Bytes Transmited
     const char cmd2[] = "ATBC\r";
     volatile char bytes[10] = {0}; // Max 9 char (8 hex, 1 \r)
-    uint32_t num_bytes_rx = send_AT_cmd(cmd2, 5, bytes, 9);
-    bytes[num_bytes_rx-1] = '\n';
-    bytes[num_bytes_rx] = '\r';
-
-    // Transmision Failure Count
+    uint32_t num_bytes_rx;
     const char cmd3[] = "ATTR\r";
     volatile char fails[6] = {0}; // Max 5 char (4 hex, 1 \r)
-    uint32_t num_fails_rx = send_AT_cmd(cmd3, 5, fails, 5);
-      // 0\n
-    fails[num_fails_rx-1] = '\n';
-    fails[num_fails_rx] = '\r';
+    uint32_t num_fails_rx;
+
+    if(LTE){
+      // Cellular Singal Strength
+      send_AT_cmd(huart_ptr, cmd1_lte, 5, singal, 3);
+      singal[2] = '\n'; 
+      singal[3] = '\r'; 
+    }
+    else{
+      // Name
+      send_AT_cmd(huart_ptr, cmd1, 5, name, 7);
+      name[6] = '\n'; 
+      name[7] = '\r'; 
+
+      // Bytes Transmited
+      num_bytes_rx = send_AT_cmd(huart_ptr, cmd2, 5, bytes, 9);
+      bytes[num_bytes_rx-1] = '\n';
+      bytes[num_bytes_rx] = '\r';
+
+      // Transmision Failure Count
+      num_fails_rx = send_AT_cmd(huart_ptr, cmd3, 5, fails, 5);
+      fails[num_fails_rx-1] = '\n';
+      fails[num_fails_rx] = '\r';
+    }
     // ----------------------------------------------------------------
 
     // Step 4: GET OUT OF CMD MODE
     const char exit_cmd[] = "ATCN\r";
     volatile char ok_exit[4] = {0}; 
-    send_AT_cmd(exit_cmd, 5, ok_exit, 3);
+    send_AT_cmd(huart_ptr, exit_cmd, 5, ok_exit, 3);
 
     // Step 5: Check its an "OK" response
     if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
     else{HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
     
     // Step 6: Send the data so it can be wirelessly transmited
-    HAL_UART_Transmit(&huart2, name, 8, HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart2, bytes, num_bytes_rx+1, HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart2, fails, num_fails_rx+1, HAL_MAX_DELAY);
+    if(LTE){
+      HAL_UART_Transmit(&huart5, singal, 4, HAL_MAX_DELAY);
+    }
+    else{
+      HAL_UART_Transmit(&huart2, name, 8, HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart2, bytes, num_bytes_rx+1, HAL_MAX_DELAY);
+      HAL_UART_Transmit(&huart2, fails, num_fails_rx+1, HAL_MAX_DELAY);
+    }
     return;
 }
 
 // rx_length INCLUDES the \r at the end of the msg 
-uint32_t send_AT_cmd(char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length){
+uint32_t send_AT_cmd(UART_HandleTypeDef* huart_ptr, char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length){
 
     // 1) Transmit the msg 
     for (int i = 0; i < tx_length; i++) {
         HAL_Delay(20);
-        HAL_UART_Transmit(&huart2, (uint8_t *)&tx_msg[i], 1, HAL_MAX_DELAY);
+        HAL_UART_Transmit(huart_ptr, (uint8_t *)&tx_msg[i], 1, HAL_MAX_DELAY);
     }
 
     // 2) Receive the msg
