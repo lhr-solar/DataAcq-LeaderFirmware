@@ -59,11 +59,20 @@ typedef struct {
     uint32_t length;
 } SLCAN;
 
+// AT Command (send, and receive)
+#define AT_CMD_MAX_LEN 6      // AT CMD = 4, \r\0 = 2, ==> 6
+#define RX_MSG_MAX_LEN 16
+typedef struct {
+    char tx[AT_CMD_MAX_LEN];  // Must terminate with \r
+    char rx[RX_MSG_MAX_LEN];  // Will terminate with \r
+    uint8_t rx_len;           // How many bytes were recieved 
+} AT_CMD;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -181,7 +190,7 @@ CANSignal can_signals[] = {
     { "MPPT B Boost Enable",                  0x219,  1, 0 }
 };
 
-#define CAN_SIGNAL_COUNT (sizeof(can_signals) / sizeof(CANSignal))
+#define CAN_SIGNAL_COUNT ARRAY_SIZE(can_signals) 
 // ------------------------------------------------------------------------------------------------
 
 
@@ -198,8 +207,8 @@ static void MX_TIM14_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
-void read_meta_data(UART_HandleTypeDef* huart_ptr, uint8_t LTE);
-uint32_t send_AT_cmd(UART_HandleTypeDef* huart_ptr, char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length);
+void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds);
+void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd);
 void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
 void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
 void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
@@ -362,7 +371,7 @@ int main(void)
   // Enable RX interrupt
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
-  // HAL_Delay(10000);
+  HAL_Delay(2000);
   while (1)
   {
 
@@ -382,10 +391,27 @@ int main(void)
       format_slcan_frame(0x123, data, 4, slcan_str); // slcan_str now contains: "t12340102AAFF\r"
       HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str, tx_msg_len(slcan_str), HAL_MAX_DELAY);
 
-      // Testing LTE read meta data
+      // RF AT Commands List
+      AT_CMD RF_AT_CMDs[] = {
+          { .tx = "ATNI\r" },   // Name
+          { .tx = "ATBC\r" },   // Bytes Transmited
+          { .tx = "ATTR\r" },   // Transmision Failer Count
+          { .tx = "ATDB\r" },   // Last Packet RSSI
+          { .tx = "ATGD\r" },   // Good Packet Received 
+          { .tx = "ATEA\r" },   // MAC ACK Failer Count
+      };
+      // LTE At Commands List
+      AT_CMD LTE_AT_CMDs[] = {
+          { .tx = "ATDB\r" },   // Bytes Transmited
+          { .tx = "ATDT\r" },   // Time UTC 
+          { .tx = "ATFC\r" },   // Freq Channel Number 
+      };
+      // Testing Read meta data
       while(1){
-          read_meta_data(&huart5, 1);
-          HAL_Delay(1000);
+          // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
+          // HAL_Delay(100);
+          read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+          HAL_Delay(100);
       }
 
       // Infinate SLCAN to Xbee LTE: 
@@ -459,7 +485,7 @@ int main(void)
       
 
       cyc();
-      read_meta_data(&huart2, 0);
+      read_meta_data(&huart2, 0, 0); // Note!!!!!!!!!!!! 0 at the end is wrong  
 
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
       HAL_Delay(500);
@@ -926,116 +952,70 @@ void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, 
     }
 }
 
-void read_meta_data(UART_HandleTypeDef* huart_ptr, uint8_t LTE){
+void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds){
     // XBee needs 1 second of silence before and after sending "+++"
     HAL_Delay(1001); 
 
-    // Step 0: Arm reception of UART2 data
-    HAL_UART_Receive_IT(huart_ptr, &rx_buffer, 1);  // Receive 1 byte via interrupt
+    // Step 0: Arm reception of UART data
+    HAL_UART_Receive_IT(huart_ptr, &rx_buffer, 1);
 
     // Step 1: Enter AT command mode by sending "+++"
-    const char enter_cmd[] = "+++";
-    volatile char ok_enter[4] = {0}; 
-    send_AT_cmd(huart_ptr, enter_cmd, 3, ok_enter, 3);
+    AT_CMD enter = {.tx = "+++", .rx = {0}, .rx_len = 0};
+    send_AT_cmd(huart_ptr, &enter);
 
     // Step 2: Check its an "OK" response
-    if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
+    if( (enter.rx[0] == 'O') && (enter.rx[1] == 'K') && (enter.rx[2] == '\r') ){/*all good*/}
     else{return;} // get out
 
     // Step 3: Actually get the data we want :)
-    // ----------------------------------------------------------------
-
-    const char cmd1_lte[] = "ATDB\r";
-    volatile char singal[5] = {0}; // Always 3 char (2 char, 1 \r)
-    const char cmd1[] = "ATNI\r";
-    volatile char name[8] = {0}; // Always 7 char (6 char, 1 \r)
-    const char cmd2[] = "ATBC\r";
-    volatile char bytes[10] = {0}; // Max 9 char (8 hex, 1 \r)
-    uint32_t num_bytes_rx;
-    const char cmd3[] = "ATTR\r";
-    volatile char fails[6] = {0}; // Max 5 char (4 hex, 1 \r)
-    uint32_t num_fails_rx;
-
-    if(LTE){
-      // Cellular Singal Strength
-      send_AT_cmd(huart_ptr, cmd1_lte, 5, singal, 3);
-      singal[2] = '\n'; 
-      singal[3] = '\r'; 
+    for(int i = 0; i < num_cmds; i ++){
+        send_AT_cmd(huart_ptr, &(list_AT_CMDs[i]));
     }
-    else{
-      // Name
-      send_AT_cmd(huart_ptr, cmd1, 5, name, 7);
-      name[6] = '\n'; 
-      name[7] = '\r'; 
-
-      // Bytes Transmited
-      num_bytes_rx = send_AT_cmd(huart_ptr, cmd2, 5, bytes, 9);
-      bytes[num_bytes_rx-1] = '\n';
-      bytes[num_bytes_rx] = '\r';
-
-      // Transmision Failure Count
-      num_fails_rx = send_AT_cmd(huart_ptr, cmd3, 5, fails, 5);
-      fails[num_fails_rx-1] = '\n';
-      fails[num_fails_rx] = '\r';
-    }
-    // ----------------------------------------------------------------
 
     // Step 4: GET OUT OF CMD MODE
-    const char exit_cmd[] = "ATCN\r";
-    volatile char ok_exit[4] = {0}; 
-    send_AT_cmd(huart_ptr, exit_cmd, 5, ok_exit, 3);
+    AT_CMD exit = {.tx = "ATCN\r", .rx = {0}, .rx_len = 0};
+    send_AT_cmd(huart_ptr, &exit);
 
     // Step 5: Check its an "OK" response
-    if( (ok_enter[0] == 'O') && (ok_enter[1] == 'K') && (ok_enter[2] == '\r') ){/*all good*/}
+    if( (exit.rx[0] == 'O') && (exit.rx[1] == 'K') && (exit.rx[2] == '\r') ){/*all good*/}
     else{HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
     
-    // Step 6: Send the data so it can be wirelessly transmited
-    if(LTE){
-      HAL_UART_Transmit(&huart5, singal, 4, HAL_MAX_DELAY);
-    }
-    else{
-      HAL_UART_Transmit(&huart2, name, 8, HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart2, bytes, num_bytes_rx+1, HAL_MAX_DELAY);
-      HAL_UART_Transmit(&huart2, fails, num_fails_rx+1, HAL_MAX_DELAY);
+    // Step 6: Send the data
+    for(int i = 0; i < num_cmds; i ++){
+        HAL_UART_Transmit(huart_ptr, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, HAL_MAX_DELAY);
     }
     return;
 }
 
 // rx_length INCLUDES the \r at the end of the msg 
-uint32_t send_AT_cmd(UART_HandleTypeDef* huart_ptr, char* tx_msg, uint32_t tx_length, char* rx_msg, uint32_t rx_length){
+void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd){
 
     // 1) Transmit the msg 
-    for (int i = 0; i < tx_length; i++) {
-        HAL_Delay(20);
-        HAL_UART_Transmit(huart_ptr, (uint8_t *)&tx_msg[i], 1, HAL_MAX_DELAY);
+    uint8_t len_tx = 5; // Hanlde "+++" edge case (len of 3 not 5)
+    if((at_cmd->tx[0] == '+') && (at_cmd->tx[1] == '+') && (at_cmd->tx[2] == '+')){len_tx = 3;}
+    for (int i = 0; i < len_tx; i++) {
+        HAL_UART_Transmit(huart_ptr, (uint8_t *)&at_cmd->tx[i], 1, HAL_MAX_DELAY);
     }
 
     // 2) Receive the msg
     volatile char RXdata = 0; // start as invalid value
     uint32_t index = 0;
     uint32_t iterations = 0;
-    const uint32_t MAX_ITERATIONS = 48000000;  // ~15 sec
+    const uint32_t MAX_ITERATIONS = 4800000;  // ~1.5 sec
     while(1){
-        // Break when collected rx_length bytes
-        if(index == rx_length){break;}
-
-        // Break if reach max iterations
-        if(iterations >= MAX_ITERATIONS){break;}
-        iterations++;
-
         // Collect data bytes
         if(UART_FIFO_get_Char(&RXdata)){
-          rx_msg[index] = RXdata;
+          at_cmd->rx[index] = RXdata;
           index ++;
         }
 
-        // Break if got a '\r' (after adding it to rx_msg)
-        if(RXdata == '\r'){break;}
+        // Break if got a '\r' (after adding it to rx_msg) OR if reach max iterations
+        if( (RXdata == '\r') || (iterations >= MAX_ITERATIONS)){break;}
+        iterations++;
     }
 
-    // Return number of bytes put into RXdata
-    return index;
-
+    // Update Rx_len field of AT_CMD 
+    at_cmd->rx_len = index; // (includes the \r in len count)
 }
 
 // can_id   = [0, x7FF]
