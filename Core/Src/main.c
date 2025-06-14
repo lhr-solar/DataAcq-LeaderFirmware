@@ -57,13 +57,13 @@ typedef struct {
 // SLCAN formated data transmision
 typedef struct {
     char slcanmsg[SLCAN_MAX_STRING_LEN];
-    uint32_t length;
 } SLCAN;
 
 // AT Command (send, and receive)
 #define AT_CMD_MAX_LEN 6      // AT CMD = 4, \r\0 = 2, ==> 6
 #define RX_MSG_MAX_LEN 16
 typedef struct {
+    char id[4];
     char tx[AT_CMD_MAX_LEN];  // Must terminate with \r
     char rx[RX_MSG_MAX_LEN];  // Will terminate with \r
     uint8_t rx_len;           // How many bytes were recieved 
@@ -227,6 +227,9 @@ static void MX_TIM5_Init(void);
   // Takes CAN data and turns it into ASCII SLCAN Format (called in CAN1 ISR & in some testing stuff)
   uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
 
+  // Takes AT_CMD data and turns it into ASCII SLCAN Format (helper function for AT_CMDs)
+  uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t dlc, char* out_str);
+
   // Helper function that determines char* length by finding the \r 
   uint32_t tx_msg_len(char* tx_msg);
 
@@ -235,6 +238,8 @@ static void MX_TIM5_Init(void);
 
   // Pops an SLCAN formated msg out of "can_fifo" so it can be transmited (called by user) 
   uint8_t can_fifo_pop(SLCAN* poped_msg);
+
+  uint8_t can_fifo_push(char* msg);
 
 /* USER CODE END PFP */
 
@@ -395,152 +400,168 @@ int main(void)
   while (1)
   {
 
-      // // Transmit Start of Frame:
-      // format_UART_Msg(sof, &sof_msg); // Re-format every time, to get updated time stamp
-      // HAL_UART_Transmit(&huart2, (uint8_t*)&sof_msg, sizeof(sof_msg), HAL_MAX_DELAY);
-      // transmit_ASCII_CAN_Packet(&sof_msg);
+      // // MODE #1.1) Infinate SLCAN to Xbee LTE: (have tested)
+      // // #########################################################################################################
+      // char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
+      // uint8_t dummy_data;
+      // while (1) {
+      //     // Go through all CAN ID and send dummy data
+      //     for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
+      //         // Flow control: 
+      //         GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+      //         if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+      //         else{
+      //             // Make up dummy_data:
+      //             volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+      //             dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
 
-      // // Transmit Iteration Count: 
-      // count = (count + 1) % 255;
-      // uartBuffLen = sprintf(uartBuff, "Iteration: %u \n\r", count);
-      // HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      //             // Format into SLCAN: 
+      //             format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
 
-      // // SLCAN Testing: 
-      // char slcan_str[SLCAN_MAX_STRING_LEN] = {0};
-      // uint8_t data[8] = {0x01, 0x02, 0xAA, 0xFF};
-      // format_slcan_frame(0x123, data, 4, slcan_str); // slcan_str now contains: "t12340102AAFF\r"
-      // HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str, tx_msg_len(slcan_str), HAL_MAX_DELAY);
-
-      // // RF AT Commands List
-      // AT_CMD RF_AT_CMDs[] = {
-      //     { .tx = "ATNI\r" },   // Name
-      //     { .tx = "ATBC\r" },   // Bytes Transmited
-      //     { .tx = "ATTR\r" },   // Transmision Failer Count
-      //     { .tx = "ATDB\r" },   // Last Packet RSSI
-      //     { .tx = "ATGD\r" },   // Good Packet Received 
-      //     { .tx = "ATEA\r" },   // MAC ACK Failer Count
-      // };
-      // // LTE At Commands List
-      // AT_CMD LTE_AT_CMDs[] = {
-      //     { .tx = "ATDB\r" },   // Bytes Transmited
-      //     { .tx = "ATDT\r" },   // Time UTC 
-      //     { .tx = "ATFC\r" },   // Freq Channel Number 
-      // };
-      // // Testing Read meta data
-      // while(1){
-      //     // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-      //     // HAL_Delay(100);
-      //     read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
-      //     HAL_Delay(100);
+      //             // Send and stall 
+      //             HAL_UART_Transmit(&huart5, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
+      //             HAL_Delay(1000);
+      //         }
+      //     }
       // }
+      // // #########################################################################################################
 
-      // MODE #1.1) Infinate SLCAN to Xbee LTE: (have tested)
+
+
+
+      // // MODE #1.2) Infinate SLCAN to Xbee RF: (have tested)
+      // // #########################################################################################################
+      // char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
+      // uint8_t dummy_data;
+      // while (1) {
+      //     // Go through all CAN ID and send dummy data
+      //     for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
+      //         // Flow control: 
+      //         GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+      //         if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+      //         else{
+      //             // Make up dummy_data:
+      //             volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+      //             dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
+
+      //             // Format into SLCAN: 
+      //             format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
+
+      //             // Send and stall 
+      //             HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
+      //             HAL_Delay(5);
+      //         }
+      //     }
+      // }
+      // // #########################################################################################################
+
+
+
+      // // MODE #2.1) CAN1 -> SLCAN FIFO -> XBee LTE: (have not tested) 
+      // // #########################################################################################################
+      // while(1) {
+      //     // Flow control: 
+      //     GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+      //     if (NCTS == GPIO_PIN_SET) {cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+      //     else{
+      //         // Pop from CAN1 SL-CAN SW FIFO
+      //         SLCAN poped_msg;
+      //         if(can_fifo_pop(&poped_msg)){
+      //             if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, poped_msg.length, HAL_MAX_DELAY) != HAL_OK){
+      //               cyc(); // UART tx failed for some reason idk man
+      //               // NOTE: right now if this happens the tx msg is just discarded
+      //             }
+      //         }
+      //         else{cyc();} // Failed to pop
+      //     }
+      // }
+      // // #########################################################################################################
+
+
+
+
+      // // MODE #2.2) CAN1 -> SLCAN FIFO -> XBee RF: (have not tested) 
+      // // #########################################################################################################
+      // while(1) {
+      //     // Flow control: 
+      //     GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+      //     if (NCTS == GPIO_PIN_SET) {cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+      //     else{
+      //         // Pop from CAN1 SL-CAN SW FIFO
+      //         SLCAN poped_msg;
+      //         if(can_fifo_pop(&poped_msg)){
+      //             if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, poped_msg.length, HAL_MAX_DELAY) != HAL_OK){
+      //               cyc(); // UART tx failed for some reason idk man
+      //               // NOTE: right now if this happens the tx msg is just discarded
+      //             }
+      //         }
+      //         else{cyc();} // Failed to pop
+      //     }
+      // }
+      // // #########################################################################################################
+
+
+      // MODE #2.3) CAN1 + Meta Data -> SLCAN FIFO -> XBee RF + LTE: (have not tested) 
       // #########################################################################################################
-      char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
-      uint8_t dummy_data;
-      while (1) {
-          // Go through all CAN ID and send dummy data
-          for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
-              // Flow control: 
-              GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-              if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
-              else{
-                  // Make up dummy_data:
-                  volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
-                  dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
 
-                  // Format into SLCAN: 
-                  format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
+      // RF AT Commands List
+      AT_CMD RF_AT_CMDs[] = {
+          // NOTE: MIGHT NEED TO CHANGE CANID BASED ON ENDIANESS NESS
+          { .id = "301", .tx = "ATBC\r" },   // Bytes Transmited
+          { .id = "302", .tx = "ATTR\r" },   // Transmision Failer Count
+          { .id = "303", .tx = "ATDB\r" },   // Last Packet RSSI
+          { .id = "304", .tx = "ATGD\r" },   // Good Packet Received
+          { .id = "305", .tx = "ATEA\r" },   // MAC ACK Failer Count
+      };
+      // LTE At Commands List
+      AT_CMD LTE_AT_CMDs[] = {
+          { .id = "380", .tx = "ATDB\r" },   // Cellular Singal Strength
+          // { .id = "381", .tx = "ATFC\r" },   // Freq Channel Number
+          // { .id = "382", .tx = "ATDT\r" },   // Time UTC
+      };
 
-                  // Send and stall 
-                  HAL_UART_Transmit(&huart5, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
-                  HAL_Delay(1000);
-              }
-          }
-      }
-      // #########################################################################################################
-
-
-
-
-      // MODE #1.2) Infinate SLCAN to Xbee RF: (have tested)
-      // #########################################################################################################
-      char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
-      uint8_t dummy_data;
-      while (1) {
-          // Go through all CAN ID and send dummy data
-          for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
-              // Flow control: 
-              GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-              if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
-              else{
-                  // Make up dummy_data:
-                  volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
-                  dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
-
-                  // Format into SLCAN: 
-                  format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
-
-                  // Send and stall 
-                  HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
-                  HAL_Delay(5);
-              }
-          }
-      }
-      // #########################################################################################################
-
-
-
-      // MODE #2.1) CAN1 -> SLCAN FIFO -> XBee LTE: (have not tested) 
-      // #########################################################################################################
+      // Super Loop
+      uint32_t iterations = 0;
+      const uint32_t MAX_ITERATIONS = 4800000;  // ~1.5 sec
       while(1) {
-          // Flow control: 
-          GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-          if (NCTS == GPIO_PIN_SET) {cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+          // Attempt to send LTE 
+          // -----------------------------------------------------------------------------------------------------
+          // GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+          // if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
+          // else{
+          //     SLCAN poped_msg;
+          //     if(can_fifo_pop(&poped_msg)){
+          //         if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
+          //         // NOTE: right now if this happens the tx msg is just discarded
+          //     }
+          // }
+          // -----------------------------------------------------------------------------------------------------
+
+          // Attempt to send RF
+          // -----------------------------------------------------------------------------------------------------
+          GPIO_PinState RF_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+          if (RF_NCTS == GPIO_PIN_SET) {cyc();} 
           else{
-              // Pop from CAN1 SL-CAN SW FIFO
               SLCAN poped_msg;
               if(can_fifo_pop(&poped_msg)){
-                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, poped_msg.length, HAL_MAX_DELAY) != HAL_OK){
-                    cyc(); // UART tx failed for some reason idk man
-                    // NOTE: right now if this happens the tx msg is just discarded
-                  }
+                  if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
+                  // NOTE: right now if this happens the tx msg is just discarded
               }
-              else{cyc();} // Failed to pop
           }
-      }
-      // #########################################################################################################
+          // -----------------------------------------------------------------------------------------------------
 
-
-
-
-      // MODE #2.2) CAN1 -> SLCAN FIFO -> XBee RF: (have not tested) 
-      // #########################################################################################################
-      while(1) {
-          // Flow control: 
-          GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-          if (NCTS == GPIO_PIN_SET) {cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
-          else{
-              // Pop from CAN1 SL-CAN SW FIFO
-              SLCAN poped_msg;
-              if(can_fifo_pop(&poped_msg)){
-                  if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, poped_msg.length, HAL_MAX_DELAY) != HAL_OK){
-                    cyc(); // UART tx failed for some reason idk man
-                    // NOTE: right now if this happens the tx msg is just discarded
-                  }
-              }
-              else{cyc();} // Failed to pop
+          // Read & Transmit Meta Data
+          // -----------------------------------------------------------------------------------------------------
+          if(iterations >= MAX_ITERATIONS){
+            read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
+            read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+            iterations = 0;
           }
+          else{iterations ++;}
+          // -----------------------------------------------------------------------------------------------------
       }
       // #########################################################################################################
       
-
-      // cyc();
-      // read_meta_data(&huart2, 0, 0); // Note!!!!!!!!!!!! 0 at the end is wrong  
-
-      // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
-      // HAL_Delay(500);
-
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
   }
@@ -872,6 +893,24 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+// Push a message into the CAN FIFO.
+// Assumes caller disables interrupts if needed.
+// Returns 1 if successful, 0 if buffer is full.
+uint8_t can_fifo_push(char* msg) {
+    uint16_t next_head = (can_fifo_head + 1) % CAN_FIFO_SIZE;
+
+    // Check if buffer is full
+    if (next_head == can_fifo_tail) {
+        return 0;  // FIFO full
+    }
+
+    // Deep copy into SW FIFO
+    strcpy(can_fifo[can_fifo_head].slcanmsg, msg);
+    can_fifo_head = next_head;
+
+    return 1;  // Success
+}
+
 // 0 = Fail
 // 1 = Win
 // Pop from the CAN1 (car can) SW FIFO
@@ -881,7 +920,7 @@ uint8_t can_fifo_pop(SLCAN* poped_msg) {
         return 0;
     }
 
-    *poped_msg = can_fifo[can_fifo_tail];
+    strcpy(poped_msg->slcanmsg, can_fifo[can_fifo_tail].slcanmsg);
     can_fifo_tail = (can_fifo_tail + 1) % CAN_FIFO_SIZE;
     return 1;
 }
@@ -892,20 +931,16 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     CAN_RxHeaderTypeDef rxHeader;
     uint8_t rxData[8];
 
-    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
-    {
-        uint16_t next_head = (can_fifo_head + 1) % CAN_FIFO_SIZE;
-        // Put in fifo, drop if full
-        if (next_head != can_fifo_tail) {
-            // Format, drop if fail
-            if(format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, can_fifo[can_fifo_head].slcanmsg)){
-                can_fifo[can_fifo_head].length = tx_msg_len(can_fifo[can_fifo_head].slcanmsg);
-                can_fifo_head = next_head;  // only "put" in fifo, if format success
-            }
-            else{cyc();}  // Failed format
-        }
-        else{cyc();}  // FIFO full
-    }
+    // Get Data out of CAN HW FIFO
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) != HAL_OK){cyc(); return;}
+
+    // Format data as slcan 
+    volatile char slcan_msg [SLCAN_MAX_STRING_LEN];
+    if(!format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, &slcan_msg)){cyc(); return;} // Failed to format
+
+    // Push slcan_msg into SW FIFO 
+    if(!can_fifo_push(&slcan_msg)){cyc();} // Push failed, SW FIFO Full
+
 }
 
 void CAN1_RX0_IRQHandler(void)
@@ -1031,9 +1066,16 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
     if( (exit.rx[0] == 'O') && (exit.rx[1] == 'K') && (exit.rx[2] == '\r') ){/*all good*/}
     else{HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
     
-    // Step 6: Send the data
+    // Step 6: Add the data to SW FIFOs
+    char slcan_msg [SLCAN_MAX_STRING_LEN];
     for(int i = 0; i < num_cmds; i ++){
-        HAL_UART_Transmit(huart_ptr, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, HAL_MAX_DELAY);
+        if(format_slcan_frame_AT_CMD(list_AT_CMDs[i].id, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, slcan_msg)){
+            // ISR also pushes to can fifo, so need to make atomic
+            __disable_irq();  
+            if(!can_fifo_push(slcan_msg)){cyc();} // FIFO Full = cyc()
+            __enable_irq();
+        }
+        // HAL_UART_Transmit(huart_ptr, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, HAL_MAX_DELAY);
     }
     return;
 }
@@ -1068,6 +1110,30 @@ void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd){
     // Update Rx_len field of AT_CMD 
     at_cmd->rx_len = index; // (includes the \r in len count)
 }
+
+
+// Assumes that DLC is uint8_t not char 
+uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t dlc, char* out_str){
+    if (dlc > 8 || out_str == NULL) {
+        strcpy(out_str, ""); // Clear output on invalid input
+        return 0;
+    }
+
+    // Start the frame with 't' and CAN ID
+    uint32_t num_bytes = (dlc-1)/2;
+      // SLCAN format bs, trust
+    sprintf(out_str, "%s%X", can_id, num_bytes);
+
+    // Append data (already hex and has \r at end) 
+    for (uint8_t i = 0; i < dlc; i++) {
+        out_str[4 + i] = data[i];
+    }
+
+    // Sucess 
+    return 1;
+}
+
+
 
 // can_id   = [0, x7FF]
 // data     = Max 8 bytes 
