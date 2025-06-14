@@ -32,11 +32,13 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+// Temporary storage for reading CAN msgs
 typedef struct __attribute__((__packed__)) {
     CAN_RxHeaderTypeDef header;
     uint8_t data[8];
 } CAN_UART_Packet;
 
+// MATTHEW formated data transmision
 typedef struct __attribute__((__packed__)) {
     uint16_t can_id;      // 0 to 0x7FF
     uint16_t time_stamp;  // 10ms period (tim2)
@@ -44,7 +46,6 @@ typedef struct __attribute__((__packed__)) {
     uint8_t  data[8];     // data payload
 } CAN_FORMATTED_Packet;
 
-// Defining the can singals 
 #define SLCAN_MAX_STRING_LEN 32  // Enough for 't' + 3 (id) + 1 (dlc) + 16 (data) + 1 (\r) + 1 (\0)
 typedef struct {
     const char* name;
@@ -53,7 +54,7 @@ typedef struct {
     uint8_t  index_used;   // 1 if index used, 0 otherwise
 } CANSignal;
 
-// SLCAN shit 
+// SLCAN formated data transmision
 typedef struct {
     char slcanmsg[SLCAN_MAX_STRING_LEN];
     uint32_t length;
@@ -207,15 +208,34 @@ static void MX_TIM14_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
-void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds);
-void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd);
-void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
-void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
-void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
-int  UART_FIFO_get_Char(char* rx_char);
-uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
-uint32_t tx_msg_len(char* tx_msg);
-uint8_t can_fifo_pop(SLCAN* poped_msg);
+
+  // Read Either LTE or RF MetaData from module (called by user) 
+  void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds);
+
+  // Sends an AT Command to LTE or RF Module (helper function of read_meta_data)
+  void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd);
+
+  // Formats a char* data packet into MATTHEW data transmit format. Used for data acq internal can msgs (called by user)  
+  void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
+
+  // Turns (temporary) CAN Packet format into MATTHEW data transmit format. (not being called rn)
+  void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
+
+  // Debugging function to transmit MATTHEW data format in a more readable format (called by user ig)
+  void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
+
+  // Takes CAN data and turns it into ASCII SLCAN Format (called in CAN1 ISR & in some testing stuff)
+  uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
+
+  // Helper function that determines char* length by finding the \r 
+  uint32_t tx_msg_len(char* tx_msg);
+
+  // Helper function of send_at_cmd(). UART ISR puts RX bytes into this FIFO, send_at_cmd() reads them out
+  int UART_FIFO_get_Char(char* rx_char);
+
+  // Pops an SLCAN formated msg out of "can_fifo" so it can be transmited (called by user) 
+  uint8_t can_fifo_pop(SLCAN* poped_msg);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -375,46 +395,47 @@ int main(void)
   while (1)
   {
 
-      // Transmit Start of Frame:
-      format_UART_Msg(sof, &sof_msg); // Re-format every time, to get updated time stamp
-      HAL_UART_Transmit(&huart2, (uint8_t*)&sof_msg, sizeof(sof_msg), HAL_MAX_DELAY);
-      transmit_ASCII_CAN_Packet(&sof_msg);
+      // // Transmit Start of Frame:
+      // format_UART_Msg(sof, &sof_msg); // Re-format every time, to get updated time stamp
+      // HAL_UART_Transmit(&huart2, (uint8_t*)&sof_msg, sizeof(sof_msg), HAL_MAX_DELAY);
+      // transmit_ASCII_CAN_Packet(&sof_msg);
 
-      // Transmit Iteration Count: 
-      count = (count + 1) % 255;
-      uartBuffLen = sprintf(uartBuff, "Iteration: %u \n\r", count);
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
+      // // Transmit Iteration Count: 
+      // count = (count + 1) % 255;
+      // uartBuffLen = sprintf(uartBuff, "Iteration: %u \n\r", count);
+      // HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
 
-      // SLCAN Testing: 
-      char slcan_str[SLCAN_MAX_STRING_LEN] = {0};
-      uint8_t data[8] = {0x01, 0x02, 0xAA, 0xFF};
-      format_slcan_frame(0x123, data, 4, slcan_str); // slcan_str now contains: "t12340102AAFF\r"
-      HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str, tx_msg_len(slcan_str), HAL_MAX_DELAY);
+      // // SLCAN Testing: 
+      // char slcan_str[SLCAN_MAX_STRING_LEN] = {0};
+      // uint8_t data[8] = {0x01, 0x02, 0xAA, 0xFF};
+      // format_slcan_frame(0x123, data, 4, slcan_str); // slcan_str now contains: "t12340102AAFF\r"
+      // HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str, tx_msg_len(slcan_str), HAL_MAX_DELAY);
 
-      // RF AT Commands List
-      AT_CMD RF_AT_CMDs[] = {
-          { .tx = "ATNI\r" },   // Name
-          { .tx = "ATBC\r" },   // Bytes Transmited
-          { .tx = "ATTR\r" },   // Transmision Failer Count
-          { .tx = "ATDB\r" },   // Last Packet RSSI
-          { .tx = "ATGD\r" },   // Good Packet Received 
-          { .tx = "ATEA\r" },   // MAC ACK Failer Count
-      };
-      // LTE At Commands List
-      AT_CMD LTE_AT_CMDs[] = {
-          { .tx = "ATDB\r" },   // Bytes Transmited
-          { .tx = "ATDT\r" },   // Time UTC 
-          { .tx = "ATFC\r" },   // Freq Channel Number 
-      };
-      // Testing Read meta data
-      while(1){
-          // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-          // HAL_Delay(100);
-          read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
-          HAL_Delay(100);
-      }
+      // // RF AT Commands List
+      // AT_CMD RF_AT_CMDs[] = {
+      //     { .tx = "ATNI\r" },   // Name
+      //     { .tx = "ATBC\r" },   // Bytes Transmited
+      //     { .tx = "ATTR\r" },   // Transmision Failer Count
+      //     { .tx = "ATDB\r" },   // Last Packet RSSI
+      //     { .tx = "ATGD\r" },   // Good Packet Received 
+      //     { .tx = "ATEA\r" },   // MAC ACK Failer Count
+      // };
+      // // LTE At Commands List
+      // AT_CMD LTE_AT_CMDs[] = {
+      //     { .tx = "ATDB\r" },   // Bytes Transmited
+      //     { .tx = "ATDT\r" },   // Time UTC 
+      //     { .tx = "ATFC\r" },   // Freq Channel Number 
+      // };
+      // // Testing Read meta data
+      // while(1){
+      //     // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
+      //     // HAL_Delay(100);
+      //     read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+      //     HAL_Delay(100);
+      // }
 
-      // Infinate SLCAN to Xbee LTE: 
+      // MODE #1.1) Infinate SLCAN to Xbee LTE: (have tested)
+      // #########################################################################################################
       char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
       uint8_t dummy_data;
       while (1) {
@@ -437,35 +458,64 @@ int main(void)
               }
           }
       }
+      // #########################################################################################################
 
-      // // Infinate SLCAN to Xbee RF: 
-      // char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
-      // uint8_t dummy_data;
-      // while (1) {
-      //     // Go through all CAN ID and send dummy data
-      //     for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
-      //         // Flow control: 
-      //         GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-      //         if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
-      //         else{
-      //             // Make up dummy_data:
-      //             volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
-      //             dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
 
-      //             // Format into SLCAN: 
-      //             format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
 
-      //             // Send and stall 
-      //             HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
-      //             HAL_Delay(5);
-      //         }
-      //     }
-      // }
 
-      // CAN1 -> XBee RF: (CAN is put in SLCAN SW FIFO) this gets from SLCAN SW FIFO and sends to RF Module
-      // ################################## HAS NOT BEEN TESTED ##########################################
-      // ################################## HAS NOT BEEN TESTED ##########################################
-      // ################################## HAS NOT BEEN TESTED ##########################################
+      // MODE #1.2) Infinate SLCAN to Xbee RF: (have tested)
+      // #########################################################################################################
+      char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
+      uint8_t dummy_data;
+      while (1) {
+          // Go through all CAN ID and send dummy data
+          for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
+              // Flow control: 
+              GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+              if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+              else{
+                  // Make up dummy_data:
+                  volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+                  dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
+
+                  // Format into SLCAN: 
+                  format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
+
+                  // Send and stall 
+                  HAL_UART_Transmit(&huart2, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
+                  HAL_Delay(5);
+              }
+          }
+      }
+      // #########################################################################################################
+
+
+
+      // MODE #2.1) CAN1 -> SLCAN FIFO -> XBee LTE: (have not tested) 
+      // #########################################################################################################
+      while(1) {
+          // Flow control: 
+          GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+          if (NCTS == GPIO_PIN_SET) {cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
+          else{
+              // Pop from CAN1 SL-CAN SW FIFO
+              SLCAN poped_msg;
+              if(can_fifo_pop(&poped_msg)){
+                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, poped_msg.length, HAL_MAX_DELAY) != HAL_OK){
+                    cyc(); // UART tx failed for some reason idk man
+                    // NOTE: right now if this happens the tx msg is just discarded
+                  }
+              }
+              else{cyc();} // Failed to pop
+          }
+      }
+      // #########################################################################################################
+
+
+
+
+      // MODE #2.2) CAN1 -> SLCAN FIFO -> XBee RF: (have not tested) 
+      // #########################################################################################################
       while(1) {
           // Flow control: 
           GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
@@ -482,13 +532,14 @@ int main(void)
               else{cyc();} // Failed to pop
           }
       }
+      // #########################################################################################################
       
 
-      cyc();
-      read_meta_data(&huart2, 0, 0); // Note!!!!!!!!!!!! 0 at the end is wrong  
+      // cyc();
+      // read_meta_data(&huart2, 0, 0); // Note!!!!!!!!!!!! 0 at the end is wrong  
 
-      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
-      HAL_Delay(500);
+      // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+      // HAL_Delay(500);
 
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
