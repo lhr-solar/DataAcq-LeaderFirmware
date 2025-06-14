@@ -507,22 +507,22 @@ int main(void)
       // RF AT Commands List
       AT_CMD RF_AT_CMDs[] = {
           // NOTE: MIGHT NEED TO CHANGE CANID BASED ON ENDIANESS NESS
-          { .id = "301", .tx = "ATBC\r" },   // Bytes Transmited
-          { .id = "302", .tx = "ATTR\r" },   // Transmision Failer Count
-          { .id = "303", .tx = "ATDB\r" },   // Last Packet RSSI
-          { .id = "304", .tx = "ATGD\r" },   // Good Packet Received
-          { .id = "305", .tx = "ATEA\r" },   // MAC ACK Failer Count
+          { .id = "701", .tx = "ATBC\r" },   // Bytes Transmited
+          { .id = "702", .tx = "ATTR\r" },   // Transmision Failer Count
+          { .id = "703", .tx = "ATDB\r" },   // Last Packet RSSI
+          { .id = "704", .tx = "ATGD\r" },   // Good Packet Received
+          { .id = "705", .tx = "ATEA\r" },   // MAC ACK Failer Count
       };
       // LTE At Commands List
       AT_CMD LTE_AT_CMDs[] = {
-          { .id = "380", .tx = "ATDB\r" },   // Cellular Singal Strength
+          { .id = "780", .tx = "ATDB\r" },   // Cellular Singal Strength
           // { .id = "381", .tx = "ATFC\r" },   // Freq Channel Number
           // { .id = "382", .tx = "ATDT\r" },   // Time UTC
       };
 
       // Super Loop
       uint32_t iterations = 0;
-      const uint32_t MAX_ITERATIONS = 4800000;  // ~1.5 sec
+      const uint32_t MAX_ITERATIONS = 48000000;  // ~15 sec
       while(1) {
           // Attempt to send LTE 
           // -----------------------------------------------------------------------------------------------------
@@ -1040,7 +1040,7 @@ void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, 
 
 void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds){
     // XBee needs 1 second of silence before and after sending "+++"
-    HAL_Delay(1001); 
+    HAL_Delay(1100); 
 
     // Step 0: Arm reception of UART data
     HAL_UART_Receive_IT(huart_ptr, &rx_buffer, 1);
