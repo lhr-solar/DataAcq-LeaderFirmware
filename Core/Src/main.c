@@ -109,6 +109,14 @@ volatile uint16_t fifo_tail = 0;
 volatile SLCAN can_fifo[CAN_FIFO_SIZE];
 volatile uint16_t can_fifo_head = 0;
 volatile uint16_t can_fifo_tail = 0;
+
+volatile SLCAN rf_tx_fifo[CAN_FIFO_SIZE];
+volatile uint16_t rf_tx_fifo_head = 0;
+volatile uint16_t rf_tx_fifo_tail = 0;
+
+volatile SLCAN lte_tx_fifo[CAN_FIFO_SIZE];
+volatile uint16_t lte_tx_fifo_head = 0;
+volatile uint16_t lte_tx_fifo_tail = 0;
 // -----------------------------
 
 // SLCAN shit 
@@ -238,8 +246,11 @@ static void MX_TIM5_Init(void);
 
   // Pops an SLCAN formated msg out of "can_fifo" so it can be transmited (called by user) 
   uint8_t can_fifo_pop(SLCAN* poped_msg);
-
   uint8_t can_fifo_push(char* msg);
+
+  // Generic push and pop for "Transmit" SW FIFO (can be any sw fifo of type SLCAN)
+  uint8_t tx_fifo_push(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, char* msg);
+  uint8_t tx_fifo_pop(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, SLCAN* poped_msg);
 
 /* USER CODE END PFP */
 
@@ -396,7 +407,7 @@ int main(void)
   // Enable RX interrupt
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
-  HAL_Delay(2000);
+  // HAL_Delay(2000);
   while (1)
   {
 
@@ -522,28 +533,32 @@ int main(void)
 
       // Super Loop
       uint32_t iterations = 0;
-      const uint32_t MAX_ITERATIONS = 48000000;  // ~15 sec
+      const uint32_t MAX_ITERATIONS = 4800000;  // ~1.5 sec
+      for(int i = 0; i < 10; i++){
+          cyc(); 
+          HAL_Delay(1000); 
+      }
       while(1) {
-          // Attempt to send LTE 
+          // Attempt to send LTE (have not tested)
           // -----------------------------------------------------------------------------------------------------
           // GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
           // if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
           // else{
           //     SLCAN poped_msg;
-          //     if(can_fifo_pop(&poped_msg)){
+          //     if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
           //         if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
           //         // NOTE: right now if this happens the tx msg is just discarded
           //     }
           // }
           // -----------------------------------------------------------------------------------------------------
 
-          // Attempt to send RF
+          // Attempt to send RF (tested)
           // -----------------------------------------------------------------------------------------------------
           GPIO_PinState RF_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
           if (RF_NCTS == GPIO_PIN_SET) {cyc();} 
           else{
               SLCAN poped_msg;
-              if(can_fifo_pop(&poped_msg)){
+              if(tx_fifo_pop(&rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, &poped_msg)){
                   if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
                   // NOTE: right now if this happens the tx msg is just discarded
               }
@@ -554,7 +569,7 @@ int main(void)
           // -----------------------------------------------------------------------------------------------------
           if(iterations >= MAX_ITERATIONS){
             read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-            read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+            // read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
             iterations = 0;
           }
           else{iterations ++;}
@@ -911,6 +926,24 @@ uint8_t can_fifo_push(char* msg) {
     return 1;  // Success
 }
 
+// Push a message into the CAN FIFO.
+// Assumes caller disables interrupts if needed.
+// Returns 1 if successful, 0 if buffer is full.
+uint8_t tx_fifo_push(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, char* msg){
+    uint16_t next_head = (*tx_fifo_head + 1) % CAN_FIFO_SIZE;
+
+    // Check if buffer is full
+    if (next_head == *tx_fifo_tail) {
+        return 0;  // FIFO full
+    }
+
+    // Deep copy into SW FIFO
+    strcpy(tx_fifo[*tx_fifo_head].slcanmsg, msg);
+    *tx_fifo_head = next_head;
+
+    return 1;  // Success
+}
+
 // 0 = Fail
 // 1 = Win
 // Pop from the CAN1 (car can) SW FIFO
@@ -924,6 +957,20 @@ uint8_t can_fifo_pop(SLCAN* poped_msg) {
     can_fifo_tail = (can_fifo_tail + 1) % CAN_FIFO_SIZE;
     return 1;
 }
+
+
+// Pop from the provided SW fifo 
+uint8_t tx_fifo_pop(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, SLCAN* poped_msg) {
+    if (*tx_fifo_head == *tx_fifo_tail) {
+        // Buffer is empty
+        return 0;
+    }
+
+    strcpy(poped_msg->slcanmsg, tx_fifo[*tx_fifo_tail].slcanmsg);
+    *tx_fifo_tail = (*tx_fifo_tail + 1) % CAN_FIFO_SIZE;
+    return 1;
+}
+
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
@@ -939,8 +986,10 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     if(!format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, &slcan_msg)){cyc(); return;} // Failed to format
 
     // Push slcan_msg into SW FIFO 
-    if(!can_fifo_push(&slcan_msg)){cyc();} // Push failed, SW FIFO Full
-
+    uint8_t success = 1;
+    success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
+    success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
+    if(!success){cyc();} // Push failed, SW FIFO Full
 }
 
 void CAN1_RX0_IRQHandler(void)
@@ -1071,11 +1120,13 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
     for(int i = 0; i < num_cmds; i ++){
         if(format_slcan_frame_AT_CMD(list_AT_CMDs[i].id, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, slcan_msg)){
             // ISR also pushes to can fifo, so need to make atomic
+            uint8_t success = 1;
             __disable_irq();  
-            if(!can_fifo_push(slcan_msg)){cyc();} // FIFO Full = cyc()
+            success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
+            success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
             __enable_irq();
+            if(!success){cyc();} // FIFO Full = cyc()
         }
-        // HAL_UART_Transmit(huart_ptr, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, HAL_MAX_DELAY);
     }
     return;
 }
