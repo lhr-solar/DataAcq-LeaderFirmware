@@ -61,12 +61,13 @@ typedef struct {
 
 // AT Command (send, and receive)
 #define AT_CMD_MAX_LEN 6      // AT CMD = 4, \r\0 = 2, ==> 6
-#define RX_MSG_MAX_LEN 16
+#define RX_MSG_MAX_LEN 16     // 16 ASCII Hex Chars = 8 bytes = Max CAN data payload
 typedef struct {
-    char id[4];
+    char id[4];               // Can ID (null terimating string)
     char tx[AT_CMD_MAX_LEN];  // Must terminate with \r
     char rx[RX_MSG_MAX_LEN];  // Will terminate with \r
     uint8_t rx_len;           // How many bytes were recieved 
+    uint8_t rx_max_bytes;     // Max number of bytes for this can msg
 } AT_CMD;
 
 /* USER CODE END PTD */
@@ -233,7 +234,8 @@ static void MX_TIM5_Init(void);
   uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
 
   // Takes AT_CMD data and turns it into ASCII SLCAN Format (helper function for AT_CMDs)
-  uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t dlc, char* out_str);
+  // uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t rx_bytes, char* out_str);
+  uint32_t format_slcan_frame_AT_CMD(AT_CMD* command, char* out_str);
 
   // Helper function that determines char* length by finding the \r 
   uint32_t tx_msg_len(char* tx_msg);
@@ -428,22 +430,22 @@ int main(void)
       // RF AT Commands List
       AT_CMD RF_AT_CMDs[] = {
           // NOTE: MIGHT NEED TO CHANGE CANID BASED ON ENDIANESS NESS
-          { .id = "701", .tx = "ATBC\r" },   // Bytes Transmited
-          { .id = "702", .tx = "ATTR\r" },   // Transmision Failer Count
-          { .id = "703", .tx = "ATDB\r" },   // Last Packet RSSI
-          { .id = "704", .tx = "ATGD\r" },   // Good Packet Received
-          { .id = "705", .tx = "ATEA\r" },   // MAC ACK Failer Count
+          { .id = "701", .tx = "ATBC\r", .rx_max_bytes = 4 },   // Bytes Transmited
+          { .id = "702", .tx = "ATTR\r", .rx_max_bytes = 2 },   // Transmision Failer Count
+          { .id = "703", .tx = "ATDB\r", .rx_max_bytes = 1 },   // Last Packet RSSI
+          { .id = "704", .tx = "ATGD\r", .rx_max_bytes = 2 },   // Good Packet Received
+          { .id = "705", .tx = "ATEA\r", .rx_max_bytes = 2 },   // MAC ACK Failer Count
       };
       // LTE At Commands List
       AT_CMD LTE_AT_CMDs[] = {
-          { .id = "780", .tx = "ATDB\r" },   // Cellular Singal Strength
+          { .id = "780", .tx = "ATDB\r", .rx_max_bytes = 1},   // Cellular Singal Strength
           // { .id = "381", .tx = "ATFC\r" },   // Freq Channel Number
           // { .id = "382", .tx = "ATDT\r" },   // Time UTC
       };
 
       // Super Loop
       uint32_t iterations = 0;
-      const uint32_t MAX_ITERATIONS = 4800000;  // ~1.5 sec
+      const uint32_t MAX_ITERATIONS = 4800;  // ~1.5 sec
       for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
       while(1) {
           // Attempt to send LTE (have not tested)
@@ -992,7 +994,8 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
     // Step 6: Add the data to SW FIFOs
     char slcan_msg [SLCAN_MAX_STRING_LEN];
     for(int i = 0; i < num_cmds; i ++){
-        if(format_slcan_frame_AT_CMD(list_AT_CMDs[i].id, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, slcan_msg)){
+        // if(format_slcan_frame_AT_CMD(list_AT_CMDs[i].id, list_AT_CMDs[i].rx, list_AT_CMDs[i].rx_len, slcan_msg)){
+        if(format_slcan_frame_AT_CMD(&(list_AT_CMDs[i]), slcan_msg)){
             // ISR also pushes to can fifo, so need to make atomic
             uint8_t success = 1;
             __disable_irq();  
@@ -1037,31 +1040,55 @@ void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd){
 }
 
 
+
+// // AT Command (send, and receive)
+// #define AT_CMD_MAX_LEN 6      // AT CMD = 4, \r\0 = 2, ==> 6
+// #define RX_MSG_MAX_LEN 16     // 16 ASCII Hex Chars = 8 bytes = Max CAN data payload
+// typedef struct {
+//     char id[4];               // Can ID (null terimating string)
+//     char tx[AT_CMD_MAX_LEN];  // Must terminate with \r
+//     char rx[RX_MSG_MAX_LEN];  // Will terminate with \r
+//     uint8_t rx_len;           // How many bytes were recieved 
+//     uint8_t rx_max_bytes;     // Max number of bytes for this can msg
+// } AT_CMD;
+
+
 // Assumes that DLC is uint8_t not char 
-uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t dlc, char* out_str){
-    if (dlc > 8 || out_str == NULL) {
+// uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t rx_bytes, char* out_str){
+uint32_t format_slcan_frame_AT_CMD(AT_CMD* command, char* out_str){
+    char* can_id       = command->id;
+    char* data         = command->rx;
+    uint8_t rx_len     = command->rx_len;
+    uint8_t rx_max_len = command->rx_max_bytes;
+
+    if (rx_len > 8 || out_str == NULL || data == NULL) {
         strcpy(out_str, ""); // Clear output on invalid input
         return 0;
     }
 
     // Start the frame with 't' and CAN ID
-    uint32_t num_bytes = dlc/2;
-      // SLCAN format bs, trust
-    sprintf(out_str, "t%s%X", can_id, num_bytes);
+    // uint32_t num_bytes = rx_bytes/2;
+    sprintf(out_str, "t%s%X", can_id, rx_max_len);
+      // CAN msgs have fixed length (not dynamic)
+
+    // Pad the front with zeros (if needed)
+    uint8_t num_actual_data = rx_len - 1;
+    uint8_t num_zero_padding = (2*rx_max_len) - num_actual_data;
+    for(int i = 0; i < num_zero_padding; i ++){
+      out_str[5 + i] = '0';
+    }
 
     // Append data (already hex and has \r at end) 
-    if((dlc % 2) == 0){
-      out_str[5] = '0';
-      for (uint8_t i = 0; i < dlc; i++) {
-          out_str[6 + i] = data[i];
-      }
-    }
-    else{
-      for (uint8_t i = 0; i < dlc; i++) {
-          out_str[5 + i] = data[i];
-      }
+    for(int i = 0; i < rx_len; i ++){
+      out_str[5 + num_zero_padding + i] = data[i];
     }
 
+    // Example of the padding:
+      // Hello\r
+      // Rx len = 6
+      // Data Length = 5
+      // 4 bytes ==> 8 Hex, 8-5 = 3 zeros 
+      // ==> t_781_4_00_0H_el_lo_\r
 
     // Sucess 
     return 1;
