@@ -448,15 +448,15 @@ int main(void)
       while(1) {
           // Attempt to send LTE (have not tested)
           // -----------------------------------------------------------------------------------------------------
-          // GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-          // if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
-          // else{
-          //     SLCAN poped_msg;
-          //     if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
-          //         if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
-          //         // NOTE: right now if this happens the tx msg is just discarded
-          //     }
-          // }
+          GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+          if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
+          else{
+              SLCAN poped_msg;
+              if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
+                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
+                  // NOTE: right now if this happens the tx msg is just discarded
+              }
+          }
           // -----------------------------------------------------------------------------------------------------
 
           // Attempt to send RF (tested)
@@ -476,7 +476,7 @@ int main(void)
           // -----------------------------------------------------------------------------------------------------
           if(iterations >= MAX_ITERATIONS){
             read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-            // read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+            read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
             iterations = 0;
           }
           else{iterations ++;}
@@ -1045,14 +1045,23 @@ uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t dlc, char* 
     }
 
     // Start the frame with 't' and CAN ID
-    uint32_t num_bytes = (dlc-1)/2;
+    uint32_t num_bytes = dlc/2;
       // SLCAN format bs, trust
-    sprintf(out_str, "%s%X", can_id, num_bytes);
+    sprintf(out_str, "t%s%X", can_id, num_bytes);
 
     // Append data (already hex and has \r at end) 
-    for (uint8_t i = 0; i < dlc; i++) {
-        out_str[4 + i] = data[i];
+    if((dlc % 2) == 0){
+      out_str[5] = '0';
+      for (uint8_t i = 0; i < dlc; i++) {
+          out_str[6 + i] = data[i];
+      }
     }
+    else{
+      for (uint8_t i = 0; i < dlc; i++) {
+          out_str[5 + i] = data[i];
+      }
+    }
+
 
     // Sucess 
     return 1;
