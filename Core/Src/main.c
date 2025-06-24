@@ -60,11 +60,12 @@ typedef struct {
 } SLCAN;
 
 // AT Command (send, and receive)
-#define AT_CMD_MAX_LEN 6      // AT CMD = 4, \r\0 = 2, ==> 6
+#define AT_CMD_MAX_LEN 16      // AT CMD = 4, \r\0 = 2, ==> 6
 #define RX_MSG_MAX_LEN 16     // 16 ASCII Hex Chars = 8 bytes = Max CAN data payload
 typedef struct {
     char id[4];               // Can ID (null terimating string)
     char tx[AT_CMD_MAX_LEN];  // Must terminate with \r
+    uint8_t tx_len;           // Number of chars transmiting (including the \r)
     char rx[RX_MSG_MAX_LEN];  // Will terminate with \r
     uint8_t rx_len;           // How many bytes were recieved 
     uint8_t rx_max_bytes;     // Max number of bytes for this can msg
@@ -427,20 +428,36 @@ int main(void)
       // MODE #2) CAN1 + Meta Data -> SLCAN FIFO -> XBee RF + LTE:
       // #########################################################################################################
 
+      // GC, GT is the guard time (rn its 1 sec, can change)
+        // AT_GT_5_\r // Changes guard time to 5
+        // Dont need to do anything specil, just exit CMD mode 
+      // CT is how long it waits before dropping the Command mode
+
+
       // RF AT Commands List
       AT_CMD RF_AT_CMDs[] = {
           // NOTE: MIGHT NEED TO CHANGE CANID BASED ON ENDIANESS NESS
-          { .id = "701", .tx = "ATBC\r", .rx_max_bytes = 4 },   // Bytes Transmited
-          { .id = "702", .tx = "ATTR\r", .rx_max_bytes = 2 },   // Transmision Failer Count
-          { .id = "703", .tx = "ATDB\r", .rx_max_bytes = 1 },   // Last Packet RSSI
-          { .id = "704", .tx = "ATGD\r", .rx_max_bytes = 2 },   // Good Packet Received
-          { .id = "705", .tx = "ATEA\r", .rx_max_bytes = 2 },   // MAC ACK Failer Count
+          { .id = "701", .tx = "ATBC\r", .tx_len = 5, .rx_max_bytes = 4 },   // Bytes Transmited
+          { .id = "702", .tx = "ATTR\r", .tx_len = 5, .rx_max_bytes = 2 },   // Transmision Failer Count
+          { .id = "703", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Last Packet RSSI
+          { .id = "704", .tx = "ATGD\r", .tx_len = 5, .rx_max_bytes = 2 },   // Good Packet Received
+          { .id = "705", .tx = "ATEA\r", .tx_len = 5, .rx_max_bytes = 2 },   // MAC ACK Failer Count
+          { .id = "706", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time
+          { .id = "707", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
       };
       // LTE At Commands List
       AT_CMD LTE_AT_CMDs[] = {
-          { .id = "780", .tx = "ATDB\r", .rx_max_bytes = 1},   // Cellular Singal Strength
+          { .id = "781", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Cellular Singal Strength
+          { .id = "782", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time 
+          { .id = "783", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
           // { .id = "381", .tx = "ATFC\r" },   // Freq Channel Number
           // { .id = "382", .tx = "ATDT\r" },   // Time UTC
+      };
+      // Changing the Guard Time & Timeout Time
+      AT_CMD module_configure[] = {
+          { .id = "XXX", .tx = "ATGT2\r", .tx_len = 6, .rx_max_bytes = 0 },   // Guard Time = 2ms (min)
+          { .id = "XXX", .tx = "ATCT2\r", .tx_len = 6, .rx_max_bytes = 0 },   // Command Mode Timeout = 200ms (min) 
+          { .id = "XXX", .tx = "ATWR\r",  .tx_len = 5, .rx_max_bytes = 0 },    // Write the changes to non volatile flash mem 
       };
 
       // Super Loop
@@ -448,17 +465,33 @@ int main(void)
       const uint32_t MAX_ITERATIONS = 4800;  // ~1.5 sec
       for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
       while(1) {
+
+          // Configure the Guard Time and Timeout Time
+          // -----------------------------------------------------------------------------------------------------
+          // RF:
+          // read_meta_data(&huart2, &module_configure, ARRAY_SIZE(module_configure));
+          // LTE:
+          // read_meta_data(&huart5, &module_configure, ARRAY_SIZE(module_configure));
+          // NOTE NOTE NOTE NOTE NOTE NOTE 
+          // Need to comment out the tx_push part of the read_meta_data outherwise you WILL HARDFAULT 
+          // ALSO comment back in the hal delay in there (has a comment next to it)
+          // while(1){
+          //   HAL_Delay(50);
+          //   cyc();
+          // }
+          // -----------------------------------------------------------------------------------------------------
+
           // Attempt to send LTE (have not tested)
           // -----------------------------------------------------------------------------------------------------
-          GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-          if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
-          else{
-              SLCAN poped_msg;
-              if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
-                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
-                  // NOTE: right now if this happens the tx msg is just discarded
-              }
-          }
+          // GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+          // if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
+          // else{
+          //     SLCAN poped_msg;
+          //     if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
+          //         if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
+          //         // NOTE: right now if this happens the tx msg is just discarded
+          //     }
+          // }
           // -----------------------------------------------------------------------------------------------------
 
           // Attempt to send RF (tested)
@@ -478,7 +511,7 @@ int main(void)
           // -----------------------------------------------------------------------------------------------------
           if(iterations >= MAX_ITERATIONS){
             read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-            read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+            // read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
             iterations = 0;
           }
           else{iterations ++;}
@@ -821,9 +854,13 @@ static void MX_GPIO_Init(void)
 // Assumes caller disables interrupts if needed.
 // Returns 1 if successful, 0 if buffer is full.
 uint8_t tx_fifo_push(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, char* msg){
-    uint16_t next_head = (*tx_fifo_head + 1) % CAN_FIFO_SIZE;
 
-    // Check if buffer is full
+    // Error checking
+    if (msg == NULL || tx_fifo == NULL || tx_fifo_head == NULL || tx_fifo_tail == NULL || tx_fifo[*tx_fifo_head].slcanmsg == NULL){
+        return 0; 
+    }
+
+    uint16_t next_head = (*tx_fifo_head + 1) % CAN_FIFO_SIZE;
     if (next_head == *tx_fifo_tail) {
         return 0;  // FIFO full
     }
@@ -864,7 +901,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     // Push slcan_msg into SW FIFO 
     uint8_t success = 1;
     success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
-    success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
+    // success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
     if(!success){cyc();} // Push failed, SW FIFO Full
 }
 
@@ -965,31 +1002,36 @@ void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, 
 
 void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds){
     // XBee needs 1 second of silence before and after sending "+++"
-    HAL_Delay(1100); 
+    // HAL_Delay(1100); 
+    HAL_Delay(5); 
 
     // Step 0: Arm reception of UART data
     HAL_UART_Receive_IT(huart_ptr, &rx_buffer, 1);
 
     // Step 1: Enter AT command mode by sending "+++"
-    AT_CMD enter = {.tx = "+++", .rx = {0}, .rx_len = 0};
+    AT_CMD enter = {.tx = "+++", .tx_len = 3, .rx = {0}, .rx_len = 0};
     send_AT_cmd(huart_ptr, &enter);
 
     // Step 2: Check its an "OK" response
     if( (enter.rx[0] == 'O') && (enter.rx[1] == 'K') && (enter.rx[2] == '\r') ){/*all good*/}
-    else{return;} // get out
+    else{cyc(); return;} // get out
 
     // Step 3: Actually get the data we want :)
     for(int i = 0; i < num_cmds; i ++){
         send_AT_cmd(huart_ptr, &(list_AT_CMDs[i]));
     }
 
+    // COMMENT THIS IN/OUT IF YOU WANT TO CONFIGURE SETTINGS (commented out = normal operation)
+    // HAL_Delay(500);
+
     // Step 4: GET OUT OF CMD MODE
-    AT_CMD exit = {.tx = "ATCN\r", .rx = {0}, .rx_len = 0};
+    AT_CMD exit = {.tx = "ATCN\r", .tx_len = 5, .rx = {0}, .rx_len = 0};
     send_AT_cmd(huart_ptr, &exit);
 
     // Step 5: Check its an "OK" response
     if( (exit.rx[0] == 'O') && (exit.rx[1] == 'K') && (exit.rx[2] == '\r') ){/*all good*/}
-    else{HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
+    // else{cyc(); HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
+    else{cyc(); HAL_Delay(220);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
     
     // Step 6: Add the data to SW FIFOs
     char slcan_msg [SLCAN_MAX_STRING_LEN];
@@ -1000,7 +1042,7 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
             uint8_t success = 1;
             __disable_irq();  
             success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
-            success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
+            // success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
             __enable_irq();
             if(!success){cyc();} // FIFO Full = cyc()
         }
@@ -1012,9 +1054,9 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
 void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd){
 
     // 1) Transmit the msg 
-    uint8_t len_tx = 5; // Hanlde "+++" edge case (len of 3 not 5)
-    if((at_cmd->tx[0] == '+') && (at_cmd->tx[1] == '+') && (at_cmd->tx[2] == '+')){len_tx = 3;}
-    for (int i = 0; i < len_tx; i++) {
+    // uint8_t len_tx = 5; // Hanlde "+++" edge case (len of 3 not 5)
+    // if((at_cmd->tx[0] == '+') && (at_cmd->tx[1] == '+') && (at_cmd->tx[2] == '+')){len_tx = 3;}
+    for (int i = 0; i < at_cmd->tx_len; i++) {
         HAL_UART_Transmit(huart_ptr, (uint8_t *)&at_cmd->tx[i], 1, HAL_MAX_DELAY);
     }
 
@@ -1022,7 +1064,8 @@ void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd){
     volatile char RXdata = 0; // start as invalid value
     uint32_t index = 0;
     uint32_t iterations = 0;
-    const uint32_t MAX_ITERATIONS = 4800000;  // ~1.5 sec
+    // const uint32_t MAX_ITERATIONS = 4800000;  // 1.5 sec
+    const uint32_t MAX_ITERATIONS = 640000;  // ~ 200 ms 
     while(1){
         // Collect data bytes
         if(UART_FIFO_get_Char(&RXdata)){
