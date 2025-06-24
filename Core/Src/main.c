@@ -462,7 +462,7 @@ int main(void)
 
       // Super Loop
       uint32_t iterations = 0;
-      const uint32_t MAX_ITERATIONS = 4800;  // ~1.5 sec
+      const uint32_t MAX_ITERATIONS = 480000;  // ~1.5 sec
       for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
       while(1) {
 
@@ -483,15 +483,15 @@ int main(void)
 
           // Attempt to send LTE (have not tested)
           // -----------------------------------------------------------------------------------------------------
-          // GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-          // if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
-          // else{
-          //     SLCAN poped_msg;
-          //     if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
-          //         if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
-          //         // NOTE: right now if this happens the tx msg is just discarded
-          //     }
-          // }
+          GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+          if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
+          else{
+              SLCAN poped_msg;
+              if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
+                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
+                  // NOTE: right now if this happens the tx msg is just discarded
+              }
+          }
           // -----------------------------------------------------------------------------------------------------
 
           // Attempt to send RF (tested)
@@ -511,7 +511,7 @@ int main(void)
           // -----------------------------------------------------------------------------------------------------
           if(iterations >= MAX_ITERATIONS){
             read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-            // read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+            read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
             iterations = 0;
           }
           else{iterations ++;}
@@ -901,7 +901,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     // Push slcan_msg into SW FIFO 
     uint8_t success = 1;
     success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
-    // success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
+    success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
     if(!success){cyc();} // Push failed, SW FIFO Full
 }
 
@@ -1042,7 +1042,7 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
             uint8_t success = 1;
             __disable_irq();  
             success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
-            // success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
+            success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
             __enable_irq();
             if(!success){cyc();} // FIFO Full = cyc()
         }
