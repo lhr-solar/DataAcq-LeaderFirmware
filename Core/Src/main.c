@@ -462,7 +462,7 @@ int main(void)
 
       // Super Loop
       uint32_t iterations = 0;
-      const uint32_t MAX_ITERATIONS = 480000;  // ~1.5 sec
+      const uint32_t MAX_ITERATIONS = 9600000;  // ~12 sec when no CAN msgs
       for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
       while(1) {
 
@@ -1003,7 +1003,7 @@ void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, 
 void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds){
     // XBee needs 1 second of silence before and after sending "+++"
     // HAL_Delay(1100); 
-    HAL_Delay(5); 
+    HAL_Delay(20); 
 
     // Step 0: Arm reception of UART data
     HAL_UART_Receive_IT(huart_ptr, &rx_buffer, 1);
