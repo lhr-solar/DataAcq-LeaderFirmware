@@ -21,6 +21,8 @@
 #include "stm32f4xx_hal_can.h"
 #include "stm32f4xx_hal_tim.h"
 #include "stm32f4xx_hal_uart.h"
+#include "SevenSegment.h"
+#include "pin_config.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -259,52 +261,16 @@ typedef struct{
 
 } gpio_t;
 
-static const gpio_t ss_l[] = {
-    {GPIOB, GPIO_PIN_10}, 
-    {GPIOB, GPIO_PIN_1}, 
-    {GPIOB, GPIO_PIN_14}, 
-    {GPIOB, GPIO_PIN_2}, 
-    {GPIOB, GPIO_PIN_0}, 
-    {GPIOC, GPIO_PIN_5}, 
-    {GPIOC, GPIO_PIN_4}
-};
-
-static const gpio_t ss_r[] = {
-    {GPIOC, GPIO_PIN_6}, 
-    {GPIOC, GPIO_PIN_7}, 
-    {GPIOB, GPIO_PIN_15}, 
-    {GPIOA, GPIO_PIN_15}, 
-    {GPIOC, GPIO_PIN_10}, 
-    {GPIOC, GPIO_PIN_11}, 
-    {GPIOC, GPIO_PIN_12}
-};
-
 void iter(void){
     static int i = 0;
-    HAL_GPIO_TogglePin(ss_r[i].GPIOx, ss_r[i].GPIO_PIN);
-    HAL_GPIO_TogglePin(ss_l[i].GPIOx, ss_l[i].GPIO_PIN);
-    i = (i + 1) % 7;
+    displayNum_SevenSegment(display_1, i);
+    i = (i + 1) % 9;
 }
 
-static const gpio_t arr[] = {
-        {GPIOB, GPIO_PIN_10 },
-        {GPIOC, GPIO_PIN_6  },
-        {GPIOC, GPIO_PIN_7  },
-        {GPIOC, GPIO_PIN_12 },
-        {GPIOC, GPIO_PIN_4  },
-        {GPIOB, GPIO_PIN_0  },
-        {GPIOB, GPIO_PIN_2  },
-        {GPIOA, GPIO_PIN_15 },
-        {GPIOB, GPIO_PIN_15 },
-        {GPIOC, GPIO_PIN_12 },
-        {GPIOC, GPIO_PIN_4  }
-        };
-
 void cyc(void){
-    static int i = 1;
-    HAL_GPIO_WritePin(arr[i].GPIOx, arr[i].GPIO_PIN, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(arr[(i+1)%11].GPIOx, arr[(i+1)%11].GPIO_PIN, GPIO_PIN_RESET);
-    i = (i + 1) % 11;
+    static int i = 0;
+    displayNum_SevenSegment(display_0, i);
+    i = (i + 1) % 9;
 }
 
 /* USER CODE END 0 */
@@ -345,6 +311,7 @@ int main(void)
   MX_TIM14_Init();
   MX_TIM2_Init();
   MX_TIM5_Init();
+  SevenSegment_Init();
   /* USER CODE BEGIN 2 */
 
   // CAN Filter: 
@@ -465,6 +432,7 @@ int main(void)
       uint32_t iterations = 0;
       const uint32_t MAX_ITERATIONS = 9600000;  // ~12 sec when no CAN msgs
       for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
+      volatile uint8_t heartbeat_count = 0;
       while(1) {
 
           // Configure the Guard Time and Timeout Time
@@ -517,13 +485,18 @@ int main(void)
           }
           else{iterations ++;}
           // -----------------------------------------------------------------------------------------------------
-      }
+          if(heartbeat_count >= 100){
+            HAL_GPIO_TogglePin(HEARTBEAT_PORT, HEARTBEAT_PIN);
+            heartbeat_count++;
+          }
+          else{
+            heartbeat_count++;
+          }
+          // HAL_Delay(10);
+        }
       // #########################################################################################################
       
-    /* USER CODE END WHILE */
-    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
 }
 
 /**
@@ -789,47 +762,21 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
-                          |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_SET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_10
-                          |GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_SET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_SET);
-
-  /*Configure GPIO pins : PC3 PC4 PC5 PC6
-                           PC7 PC10 PC11 PC12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
-                          |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
+  /*Configure GPIO pins : PC3 */  
+  GPIO_InitStruct.Pin = HEARTBEAT_PIN;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(HEARTBEAT_PORT, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(HEARTBEAT_PORT, HEARTBEAT_PIN, GPIO_PIN_SET);
 
-  /*Configure GPIO pins : PB0 PB1 PB2 PB10
-                           PB14 PB15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_10
-                          |GPIO_PIN_14|GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PC8 */
   GPIO_InitStruct.Pin = GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PA15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   // RF NCTS Flow Control
   // Now, configure PA8 as input (separate setup)
