@@ -40,11 +40,12 @@ typedef struct __attribute__((__packed__)) {
 
 // MATTHEW formated data transmision
 typedef struct __attribute__((__packed__)) {
-    char     delimiter;   // ascii delimiter
+    char     start_delim; // ascii delimiter
     uint16_t can_id;      // 0 to 0x7FF
     uint16_t time_stamp;  // 10ms period (tim2)
     uint8_t  num_bytes;   // 0 to 8 bytes of data
     uint8_t  data[8];     // data payload
+    char     end_delim;   // ascii delimiter
 } CAN_FORMATTED_Packet;
 
 #define SLCAN_MAX_STRING_LEN 32  // Enough for 't' + 3 (id) + 1 (dlc) + 16 (data) + 1 (\r) + 1 (\0)
@@ -263,23 +264,23 @@ typedef struct{
 } gpio_t;
 
 static const gpio_t ss_l[] = {
-    {GPIOB, GPIO_PIN_10}, 
-    {GPIOB, GPIO_PIN_1}, 
-    {GPIOB, GPIO_PIN_14}, 
-    {GPIOB, GPIO_PIN_2}, 
-    {GPIOB, GPIO_PIN_0}, 
-    {GPIOC, GPIO_PIN_5}, 
-    {GPIOC, GPIO_PIN_4}
+    {GPIOB, GPIO_PIN_10}, // A 
+    {GPIOB, GPIO_PIN_1},  // B
+    {GPIOB, GPIO_PIN_14}, // C
+    {GPIOB, GPIO_PIN_2},  // D
+    {GPIOB, GPIO_PIN_0},  // E 
+    {GPIOC, GPIO_PIN_5},  // F
+    {GPIOC, GPIO_PIN_4}   // G
 };
 
 static const gpio_t ss_r[] = {
-    {GPIOC, GPIO_PIN_6}, 
-    {GPIOC, GPIO_PIN_7}, 
-    {GPIOB, GPIO_PIN_15}, 
-    {GPIOA, GPIO_PIN_15}, 
-    {GPIOC, GPIO_PIN_10}, 
-    {GPIOC, GPIO_PIN_11}, 
-    {GPIOC, GPIO_PIN_12}
+    {GPIOC, GPIO_PIN_6},  // A
+    {GPIOC, GPIO_PIN_7},  // B
+    {GPIOB, GPIO_PIN_15}, // C
+    {GPIOA, GPIO_PIN_15}, // D
+    {GPIOC, GPIO_PIN_10}, // E
+    {GPIOC, GPIO_PIN_11}, // F
+    {GPIOC, GPIO_PIN_12}  // G
 };
 
 void iter(void){
@@ -303,18 +304,55 @@ static const gpio_t arr[] = {
         {GPIOC, GPIO_PIN_4  }
         };
 
-// Failed to Send UART (RF, LTE)                      2
-// Failed to format to SLCAN (at cmd, normal)         2
-// HW FIFO is full (RF, LTE)                          2 
-// SW FIFO is full (RF, LTE, UART)                    3
-// Failed to read msg out of HW fifo (Uart, CAN)      2
-// Didnt get an OK from readmeta data (enter, exit)   2
-// Total of 13 Error codes 
 void cyc(void){
     static int i = 1;
     HAL_GPIO_WritePin(arr[i].GPIOx, arr[i].GPIO_PIN, GPIO_PIN_SET);
     HAL_GPIO_WritePin(arr[(i+1)%11].GPIOx, arr[(i+1)%11].GPIO_PIN, GPIO_PIN_RESET);
     i = (i + 1) % 11;
+}
+
+static const uint8_t hex_to_7seg[16] = {
+    0b00111111, 0b00000110, 0b01011011, 0b01001111,
+    0b01100110, 0b01101101, 0b01111101, 0b00000111,
+    0b01111111, 0b01101111, 0b01110111, 0b01111100,
+    0b00111001, 0b01011110, 0b01111001, 0b01110001
+};
+
+// Error codes: 
+// --- Non-Critical Errors ---
+#define ERR_UART_RF_SEND_FAIL       0x01  // Failed to send UART to RF
+#define ERR_UART_LTE_SEND_FAIL      0x02  // Failed to send UART to LTE
+#define ERR_SLCAN_CAN_FMT_FAIL      0x03  // Failed to format SLCAN for CAN
+#define ERR_SLCAN_AT_FMT_FAIL       0x04  // Failed to format SLCAN for AT
+#define ERR_CAN_FIFO_READ_FAIL      0x05  // Failed to read CAN HW FIFO
+#define ERR_UART_FIFO_READ_FAIL     0x06  // Failed to read UART HW FIFO
+#define ERR_META_ENTER_FAIL         0x07  // No OK on read_meta_data enter
+#define ERR_META_EXIT_FAIL          0x08  // No OK on read_meta_data exit
+
+// --- Critical Errors ---
+#define ERR_LTE_HW_FIFO_FULL        0x10  // LTE hardware FIFO full
+#define ERR_LTE_SW_FIFO_FULL        0x20  // LTE software FIFO full
+#define ERR_RF_HW_FIFO_FULL         0x30  // RF hardware FIFO full
+#define ERR_RF_SW_FIFO_FULL         0x40  // RF software FIFO full
+
+void display_byte_on_7seg(uint8_t value) {
+    uint8_t high_nibble = (value >> 4) & 0x0F; // Left digit
+    uint8_t low_nibble  = value & 0x0F;        // Right digit
+
+    uint8_t seg_l = hex_to_7seg[high_nibble];
+    uint8_t seg_r = hex_to_7seg[low_nibble];
+
+    // Set segments for LEFT display (high nibble)
+    for (int i = 0; i < 7; ++i) {
+        GPIO_PinState state = (seg_l & (1 << i)) ? GPIO_PIN_RESET : GPIO_PIN_SET;
+        HAL_GPIO_WritePin(ss_l[i].GPIOx, ss_l[i].GPIO_PIN, state);
+    }
+
+    // Set segments for RIGHT display (low nibble)
+    for (int i = 0; i < 7; ++i) {
+        GPIO_PinState state = (seg_r & (1 << i)) ? GPIO_PIN_RESET : GPIO_PIN_SET;
+        HAL_GPIO_WritePin(ss_r[i].GPIOx, ss_r[i].GPIO_PIN, state);
+    }
 }
 
 /* USER CODE END 0 */
@@ -409,41 +447,8 @@ int main(void)
   while (1)
   {
 
-      // // MODE #1) Infinate SLCAN to Xbee LTE: (have tested)
-      // // #########################################################################################################
-      // char slcan_str2[SLCAN_MAX_STRING_LEN] = {0};
-      // uint8_t dummy_data;
-      // while (1) {
-      //     // Go through all CAN ID and send dummy data
-      //     for (size_t i = 0; i < CAN_SIGNAL_COUNT; i++) {
-      //         // Flow control: 
-      //         GPIO_PinState NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-      //         if (NCTS == GPIO_PIN_SET) {i--; cyc();}  // NCTS = 1 means NO SENDING. reset i backwards 1
-      //         else{
-      //             // Make up dummy_data:
-      //             volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
-      //             dummy_data = ((timer_val >> (i % 8)) ^ (i * 37)) & 0xFF;
-
-      //             // Format into SLCAN: 
-      //             format_slcan_frame(can_signals[i].can_id, &dummy_data, 1, slcan_str2);
-
-      //             // Send and stall 
-      //             HAL_UART_Transmit(&huart5, (uint8_t *)slcan_str2, tx_msg_len(slcan_str2), HAL_MAX_DELAY);
-      //             HAL_Delay(1000);
-      //         }
-      //     }
-      // }
-      // // #########################################################################################################
-
-
       // MODE #2) CAN1 + Meta Data -> SLCAN FIFO -> XBee RF + LTE:
       // #########################################################################################################
-
-      // GC, GT is the guard time (rn its 1 sec, can change)
-        // AT_GT_5_\r // Changes guard time to 5
-        // Dont need to do anything specil, just exit CMD mode 
-      // CT is how long it waits before dropping the Command mode
-
 
       // RF AT Commands List
       AT_CMD RF_AT_CMDs[] = {
@@ -477,6 +482,7 @@ int main(void)
       uint32_t lte_iterations = 0;
       const uint32_t MAX_ITERATIONS = 9600000;  // ~12 sec when no CAN msgs
       for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
+      for(int i = 0; i < 11; i ++){HAL_GPIO_WritePin(arr[i].GPIOx, arr[i].GPIO_PIN, GPIO_PIN_SET);}
       while(1) {
 
           // Configure the Guard Time and Timeout Time
@@ -497,16 +503,12 @@ int main(void)
           // Attempt to send LTE (have not tested)
           // -----------------------------------------------------------------------------------------------------
           GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-          if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
+          if (LTE_NCTS == GPIO_PIN_SET) {display_byte_on_7seg(ERR_LTE_HW_FIFO_FULL);}// HW FIFO Full
           else{
               SLCAN poped_msg;
               if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
-                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
-                  if(lte_iterations > 10){
-                    send_fifo_count(0x780, lte_tx_fifo_head, lte_tx_fifo_tail);     // Num elements in LTE SW Fifo = id 0x780
-                    lte_iterations = 0;
-                  }
-                  else{lte_iterations ++;}
+                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){display_byte_on_7seg(ERR_UART_LTE_SEND_FAIL);}
+                  lte_iterations ++;
                   // NOTE: right now if this happens the tx msg is just discarded
               }
           }
@@ -514,22 +516,29 @@ int main(void)
 
           // Attempt to send RF (tested)
           // -----------------------------------------------------------------------------------------------------
-          GPIO_PinState RF_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-          if (RF_NCTS == GPIO_PIN_SET) {cyc();} 
-          else{
-              SLCAN poped_msg;
-              if(tx_fifo_pop(&rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, &poped_msg)){
-                  if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
-                  send_fifo_count(0x700, rf_tx_fifo_head, rf_tx_fifo_tail);       // Num elements in RF SW Fifo = id 0x700
-                  // NOTE: right now if this happens the tx msg is just discarded
-              }
-          }
+          // GPIO_PinState RF_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+          // if (RF_NCTS == GPIO_PIN_SET) {cyc();} 
+          // else{
+          //     SLCAN poped_msg;
+          //     if(tx_fifo_pop(&rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, &poped_msg)){
+          //         if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
+          //         send_fifo_count(0x700, rf_tx_fifo_head, rf_tx_fifo_tail);       // Num elements in RF SW Fifo = id 0x700
+          //         // NOTE: right now if this happens the tx msg is just discarded
+          //     }
+          // }
           // -----------------------------------------------------------------------------------------------------
 
           // Read / Compute & Transmit Meta Data
           // -----------------------------------------------------------------------------------------------------
+          // Every 25 LTE msgs, send the size of the LTE SW FIFO
+          if(lte_iterations > 25){
+            // Num elements in LTE SW Fifo = id 0x780
+            send_fifo_count(0x780, lte_tx_fifo_head, lte_tx_fifo_tail); 
+            lte_iterations = 0;
+          }
+          // Every MAX_ITERATIONS, read and meta data and put into SW FIFOs
           if(iterations >= MAX_ITERATIONS){
-            read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
+            // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
             read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
             iterations = 0;
           }
@@ -879,18 +888,18 @@ void send_fifo_count(uint16_t can_id, uint16_t head, uint16_t tail){
 
     char slcan_msg [SLCAN_MAX_STRING_LEN];
     // uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str) {
-    if(!format_slcan_frame(can_id, (uint8_t*)&count, 2, &slcan_msg)){cyc(); return;} // Failed to format
+    if(!format_slcan_frame(can_id, (uint8_t*)&count, 2, &slcan_msg)){display_byte_on_7seg(ERR_SLCAN_AT_FMT_FAIL); return;} // Failed to format
 
     uint8_t rf_push_success  = 1;
     uint8_t lte_push_success = 1;
 
     __disable_irq();  
-    rf_push_success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
+    // rf_push_success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
     lte_push_success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
     __enable_irq();
 
-    if(!rf_push_success){cyc();}
-    if(!lte_push_success){cyc();}
+    // if(!rf_push_success){cyc();}
+    if(!lte_push_success){display_byte_on_7seg(ERR_LTE_SW_FIFO_FULL);}
 }
 
 
@@ -936,17 +945,17 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     uint8_t rxData[8];
 
     // Get Data out of CAN HW FIFO
-    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) != HAL_OK){cyc(); return;}
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) != HAL_OK){display_byte_on_7seg(ERR_CAN_FIFO_READ_FAIL); return;}
 
     // Format data as slcan 
     volatile char slcan_msg [SLCAN_MAX_STRING_LEN];
-    if(!format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, &slcan_msg)){cyc(); return;} // Failed to format
+    if(!format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, &slcan_msg)){display_byte_on_7seg(ERR_SLCAN_CAN_FMT_FAIL); return;} // Failed to format
 
     // Push slcan_msg into SW FIFO 
     uint8_t success = 1;
-    success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
+    // success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
     success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
-    if(!success){cyc();} // Push failed, SW FIFO Full
+    if(!success){display_byte_on_7seg(ERR_LTE_SW_FIFO_FULL);} // Push failed, SW FIFO Full
 }
 
 void CAN1_RX0_IRQHandler(void)
@@ -962,7 +971,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
             fifo[fifo_head] = rx_buffer;
             fifo_head = next_head;
         } else {
-          cyc();
+          display_byte_on_7seg(ERR_UART_FIFO_READ_FAIL);
         }
         // Re-enable interrupt for next byte
         HAL_UART_Receive_IT(huart, &rx_buffer, 1);
@@ -1058,7 +1067,7 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
 
     // Step 2: Check its an "OK" response
     if( (enter.rx[0] == 'O') && (enter.rx[1] == 'K') && (enter.rx[2] == '\r') ){/*all good*/}
-    else{cyc(); return;} // get out
+    else{display_byte_on_7seg(ERR_META_ENTER_FAIL); return;} // get out
 
     // Step 3: Actually get the data we want :)
     for(int i = 0; i < num_cmds; i ++){
@@ -1075,7 +1084,7 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
     // Step 5: Check its an "OK" response
     if( (exit.rx[0] == 'O') && (exit.rx[1] == 'K') && (exit.rx[2] == '\r') ){/*all good*/}
     // else{cyc(); HAL_Delay(10100);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
-    else{cyc(); HAL_Delay(220);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
+    else{display_byte_on_7seg(ERR_META_EXIT_FAIL); HAL_Delay(220);} // No ok? ==> Delay 10.1 seconds to exit CMD mode
     
     // Step 6: Add the data to SW FIFOs
     char slcan_msg [SLCAN_MAX_STRING_LEN];
@@ -1085,10 +1094,10 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
             // ISR also pushes to can fifo, so need to make atomic
             uint8_t success = 1;
             __disable_irq();  
-            success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
+            // success &= tx_fifo_push(rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, slcan_msg);   // RF Transmit
             success &= tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg);// LTE Transmit
             __enable_irq();
-            if(!success){cyc();} // FIFO Full = cyc()
+            if(!success){display_byte_on_7seg(ERR_LTE_SW_FIFO_FULL);} // FIFO Full = cyc()
         }
     }
     return;
