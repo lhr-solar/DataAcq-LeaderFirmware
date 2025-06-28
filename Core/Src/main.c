@@ -26,6 +26,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
 #include <stdio.h>
+#include "string.h"
 
 /* USER CODE END Includes */
 
@@ -98,24 +99,24 @@ UART_HandleTypeDef huart2;
 
 // For UART2 Reception 
 // -----------------------------
-volatile uint8_t rx_buffer;
+ uint8_t rx_buffer;
 #define FIFO_SIZE 64  
-volatile uint8_t fifo[FIFO_SIZE];
-volatile uint16_t fifo_head = 0;
-volatile uint16_t fifo_tail = 0;
+ uint8_t fifo[FIFO_SIZE];
+ uint16_t fifo_head = 0;
+ uint16_t fifo_tail = 0;
 // -----------------------------
 
 // For CAN1 Reception (slcan)
 // -----------------------------
-#define CAN_FIFO_SIZE 256 // 256 SL-CAN Msgs
+#define CAN_FIFO_SIZE 512 // 256 SL-CAN Msgs
 
-volatile SLCAN rf_tx_fifo[CAN_FIFO_SIZE];
-volatile uint16_t rf_tx_fifo_head = 0;
-volatile uint16_t rf_tx_fifo_tail = 0;
+ SLCAN rf_tx_fifo[CAN_FIFO_SIZE];
+ uint16_t rf_tx_fifo_head = 0;
+ uint16_t rf_tx_fifo_tail = 0;
 
-volatile SLCAN lte_tx_fifo[CAN_FIFO_SIZE];
-volatile uint16_t lte_tx_fifo_head = 0;
-volatile uint16_t lte_tx_fifo_tail = 0;
+ SLCAN lte_tx_fifo[CAN_FIFO_SIZE];
+ uint16_t lte_tx_fifo_head = 0;
+ uint16_t lte_tx_fifo_tail = 0;
 // -----------------------------
 
 // SLCAN shit 
@@ -487,7 +488,7 @@ int main(void)
           if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
           else{
               SLCAN poped_msg;
-              if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
+              if(tx_fifo_pop((SLCAN *)&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
                   if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
                   // NOTE: right now if this happens the tx msg is just discarded
               }
@@ -500,7 +501,7 @@ int main(void)
           if (RF_NCTS == GPIO_PIN_SET) {cyc();} 
           else{
               SLCAN poped_msg;
-              if(tx_fifo_pop(&rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, &poped_msg)){
+              if(tx_fifo_pop((SLCAN *)&rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, &poped_msg)){
                   if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
                   // NOTE: right now if this happens the tx msg is just discarded
               }
@@ -510,8 +511,8 @@ int main(void)
           // Read & Transmit Meta Data
           // -----------------------------------------------------------------------------------------------------
           if(iterations >= MAX_ITERATIONS){
-            read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-            read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+            read_meta_data(&huart2, (AT_CMD  *)&RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
+            read_meta_data(&huart5, (AT_CMD  *)&LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
             iterations = 0;
           }
           else{iterations ++;}
@@ -895,8 +896,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) != HAL_OK){cyc(); return;}
 
     // Format data as slcan 
-    volatile char slcan_msg [SLCAN_MAX_STRING_LEN];
-    if(!format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, &slcan_msg)){cyc(); return;} // Failed to format
+     char slcan_msg [SLCAN_MAX_STRING_LEN];
+    if(!format_slcan_frame(rxHeader.StdId, rxData, rxHeader.DLC, (char *)&slcan_msg)){cyc(); return;} // Failed to format
 
     // Push slcan_msg into SW FIFO 
     uint8_t success = 1;
@@ -974,7 +975,7 @@ void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg){
       // Used by other systems: 1,2,4,5,6. Max = x7ff, so we will use 0x3XX
 
     // 10 ms time stamp
-    volatile uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
+    uint32_t timer_val = __HAL_TIM_GET_COUNTER(&htim2);
     uint16_t time_stamp = ((timer_val / 20)&0xFFFF); // 10ms
     formatted_msg->time_stamp = time_stamp;
 
@@ -1061,7 +1062,7 @@ void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd){
     }
 
     // 2) Receive the msg
-    volatile char RXdata = 0; // start as invalid value
+    char RXdata = 0; // start as invalid value
     uint32_t index = 0;
     uint32_t iterations = 0;
     // const uint32_t MAX_ITERATIONS = 4800000;  // 1.5 sec
