@@ -1,21 +1,3 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_hal_can.h"
@@ -23,14 +5,8 @@
 #include "stm32f4xx_hal_uart.h"
 
 /* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
 #include <stdint.h>
 #include <stdio.h>
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
 
 // Temporary storage for reading CAN msgs
 typedef struct __attribute__((__packed__)) {
@@ -48,15 +24,8 @@ typedef struct __attribute__((__packed__)) {
     char     end_delim;   // ascii delimiter
 } CAN_FORMATTED_Packet;
 
-#define SLCAN_MAX_STRING_LEN 32  // Enough for 't' + 3 (id) + 1 (dlc) + 16 (data) + 1 (\r) + 1 (\0)
-typedef struct {
-    const char* name;
-    uint16_t can_id;   // ASCII version of CAN ID
-    uint8_t  length;       // in bytes
-    uint8_t  index_used;   // 1 if index used, 0 otherwise
-} CANSignal;
-
 // SLCAN formated data transmision
+#define SLCAN_MAX_STRING_LEN 32         // Over enough for slcan format
 typedef struct {
     char slcanmsg[SLCAN_MAX_STRING_LEN];
 } SLCAN;
@@ -73,17 +42,8 @@ typedef struct {
     uint8_t rx_max_bytes;     // Max number of bytes for this can msg
 } AT_CMD;
 
-/* USER CODE END PTD */
-
 /* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
@@ -120,90 +80,6 @@ volatile uint16_t lte_tx_fifo_head = 0;
 volatile uint16_t lte_tx_fifo_tail = 0;
 // -----------------------------
 
-// SLCAN shit 
-// ------------------------------------------------------------------------------------------------
-CANSignal can_signals[] = {
-    // Controls.csv
-    { "CONTROL_MODE",                         0x580,  1, 0 },
-    { "Motor Precharge Enable",               0x582,  1, 0 },
-    { "IO_STATE",                             0x581,  3, 0 },
-    { "Controls_Fault",                       0x583,  1, 0 },
-    { "Motor Controller Safe",                0x584,  1, 0 },
-    { "Motor Controller Identification",      0x240,  8, 0 },
-    { "Motor Status",                         0x241,  8, 0 },
-    { "Motor Controller Bus",                 0x242,  8, 0 },
-    { "Velocity",                             0x243,  8, 0 },
-    { "Motor Controller Phase Current",       0x244,  8, 0 },
-    { "Motor Voltage Vector",                 0x245,  8, 0 },
-    { "Motor Current Vector",                 0x246,  8, 0 },
-    { "Motor BackEMF",                        0x247,  8, 0 },
-    { "Low Voltage Rail Measurement",         0x248,  8, 0 },
-    { "DSP Voltage Rail Measurement",         0x249,  8, 0 },
-    { "Reserved",                             0x24A,  8, 0 },
-    { "Motor Temperature",                    0x24B,  8, 0 },
-    { "DSP Board Temperature",                0x24C,  8, 0 },
-    { "Reserved",                             0x24D,  8, 0 },
-    { "Odometer / Bus Amp Hours",             0x24E,  8, 0 },
-    { "Slip Speed Measurement",               0x257,  8, 0 },
-    // Shared.csv
-    { "Dash Kill Switch",                     0x001,  1, 0 },
-    { "Any System Failures",                  0x003,  1, 0 },
-    { "Ignition",                             0x004,  1, 0 },
-    { "Any System Shutoff",                   0x005,  1, 0 },
-    // BPS.CSV
-    { "BPS Trip",                             0x002,  1, 0 },
-    { "BPS All Clear",                        0x101,  1, 0 },
-    { "BPS Contactor State",                  0x102,  1, 0 },
-    { "Current Data",                         0x103,  4, 0 },
-    { "Voltage Data Array",                   0x104,  5, 1 },
-    { "Temperature Data Array",               0x105,  5, 1 },
-    { "State of Charge Data",                 0x106,  4, 0 },
-    { "WDog Triggered",                       0x107,  1, 0 },
-    { "CAN Error",                            0x108,  1, 0 },
-    { "BPS Command msg",                      0x109,  8, 0 },
-    { "Supplemental Voltage",                 0x10B,  2, 0 },
-    { "Charging Enabled",                     0x10C,  1, 0 },
-    { "Voltage Summary",                      0x10D,  8, 0 },
-    { "Temperature Summary",                  0x10E,  8, 0 },
-    { "BPS Fault State",                      0x10F,  1, 0 },
-    // Blackbody.csv
-    { "Heartbeat (BPS)",                      0x650,  1, 0 },
-    { "Set Mode (BPS)",                       0x651,  1, 0 },
-    { "Board Fault (MPPT)",                   0x652,  2, 0 },
-    { "Acknowledge Fault (MPPT)",             0x653,  1, 0 },
-    { "Temperature Sensor Configure",         0x654,  3, 0 },
-    { "Irradiance Sensor Configure",          0x655,  3, 0 },
-    { "Temperature Measurement",              0x656,  5, 0 },
-    { "Irradiance Measurement",               0x657,  5, 0 },
-    // Contactors.csv
-    { "Contactor Sense",                      0x400,  2, 0 },
-    { "Precharge Timeout",                    0x401,  1, 0 },
-    // Sunscatter.csv
-    { "Heartbeat (Controller)",               0x600,  1, 0 },
-    { "Set Mode; BOARD OVERRIDE ENABLE",      0x601,  1, 0 },
-    { "Board Fault (Controller)",             0x602,  2, 0 },
-    { "Acknowledge Fault (Controller)",       0x603,  1, 0 },
-    { "Sensor Configure",                     0x604,  5, 0 },
-    { "Sensor Configure 2",                   0x605,  5, 0 },
-    { "Sensor Configure 3",                   0x606,  5, 0 },
-    { "Controller Configure",                 0x607,  0, 0 },
-    { "Debug Configure",                      0x608,  1, 0 },
-    { "Operating Setpoint",                   0x609,  8, 0 },
-    { "Input Voltage Measurement",            0x60A,  4, 0 },
-    { "Input Current Measurement",            0x60B,  4, 0 },
-    { "Output Voltage Measurement",           0x60C,  4, 0 },
-    { "Output Current Measurement",           0x60D,  4, 0 },
-    // TPEE.csv
-    { "MPPT A Status",                        0x201,  5, 0 },
-    { "MPPT A Boost Enable",                  0x209,  1, 0 },
-    { "MPPT B Status",                        0x211,  5, 0 },
-    { "MPPT B Boost Enable",                  0x219,  1, 0 }
-};
-
-#define CAN_SIGNAL_COUNT ARRAY_SIZE(can_signals) 
-// ------------------------------------------------------------------------------------------------
-
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -216,51 +92,45 @@ static void MX_UART5_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM5_Init(void);
-/* USER CODE BEGIN PFP */
 
-  // Read Either LTE or RF MetaData from module (called by user) 
-  void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds);
+// Read Either LTE or RF MetaData from module (called by user) 
+void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_t num_cmds);
 
-  // Sends an AT Command to LTE or RF Module (helper function of read_meta_data)
-  void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd);
+// Sends an AT Command to LTE or RF Module (helper function of read_meta_data)
+void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd);
 
+// MATTHEW CAN Format
   // Formats a char* data packet into MATTHEW data transmit format. Used for data acq internal can msgs (called by user)  
   void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg);
-
   // Turns (temporary) CAN Packet format into MATTHEW data transmit format. (not being called rn)
   void parse_RX_CAN(CAN_UART_Packet* rx_msg, CAN_FORMATTED_Packet* formatted_msg, uint16_t time_stamp);
-
   // Debugging function to transmit MATTHEW data format in a more readable format (called by user ig)
   void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* formatted_msg);
 
-  // Takes CAN data and turns it into ASCII SLCAN Format (called in CAN1 ISR & in some testing stuff)
-  uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
+// Takes CAN data and turns it into ASCII SLCAN Format (called in CAN1 ISR & in some testing stuff)
+uint32_t format_slcan_frame(uint16_t can_id, uint8_t* data, uint8_t dlc, char* out_str);
 
-  // Takes AT_CMD data and turns it into ASCII SLCAN Format (helper function for AT_CMDs)
-  // uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t rx_bytes, char* out_str);
-  uint32_t format_slcan_frame_AT_CMD(AT_CMD* command, char* out_str);
+// Takes AT_CMD data and turns it into ASCII SLCAN Format (helper function for AT_CMDs)
+// uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t rx_bytes, char* out_str);
+uint32_t format_slcan_frame_AT_CMD(AT_CMD* command, char* out_str);
 
-  // Helper function that determines char* length by finding the \r 
-  uint32_t tx_msg_len(char* tx_msg);
+// Helper function that determines char* length by finding the \r 
+uint32_t tx_msg_len(char* tx_msg);
 
-  // Helper function of send_at_cmd(). UART ISR puts RX bytes into this FIFO, send_at_cmd() reads them out
-  int UART_FIFO_get_Char(char* rx_char);
+// Helper function of send_at_cmd(). UART ISR puts RX bytes into this FIFO, send_at_cmd() reads them out
+int UART_FIFO_get_Char(char* rx_char);
 
-  // Generic push and pop for "Transmit" SW FIFO (can be any sw fifo of type SLCAN)
-  uint8_t tx_fifo_push(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, char* msg);
-  uint8_t tx_fifo_pop(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, SLCAN* poped_msg);
+// Generic push and pop for "Transmit" SW FIFO (can be any sw fifo of type SLCAN)
+uint8_t tx_fifo_push(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, char* msg);
+uint8_t tx_fifo_pop(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_tail, SLCAN* poped_msg);
 
-  // Function to compute and send fifo element count  
-  void send_fifo_count(uint16_t can_id, uint16_t head, uint16_t tail);
-
-/* USER CODE END PFP */
+// Function to compute and send fifo element count  
+void send_fifo_count(uint16_t can_id, uint16_t head, uint16_t tail);
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
 typedef struct{
     GPIO_TypeDef *GPIOx;
     uint16_t GPIO_PIN;
-
 } gpio_t;
 
 static const gpio_t ss_l[] = {
@@ -355,34 +225,19 @@ void display_byte_on_7seg(uint8_t value) {
     }
 }
 
-/* USER CODE END 0 */
-
 /**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void)
 {
-
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -393,7 +248,6 @@ int main(void)
   MX_TIM14_Init();
   MX_TIM2_Init();
   MX_TIM5_Init();
-  /* USER CODE BEGIN 2 */
 
   // CAN Filter: 
   // ----------------------------------------------
@@ -422,11 +276,6 @@ int main(void)
   // NOTE: ############ Very important for UART2 ISR reception ################
   __enable_irq();
 
-  /* USER CODE END 2 */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-
   // Set Priority level and enable IRS for UART2 RX 
   HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(USART2_IRQn);
@@ -443,114 +292,106 @@ int main(void)
   // Enable RX interrupt
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
-  // HAL_Delay(2000);
-  while (1)
-  {
+  // RF AT Commands List
+  AT_CMD RF_AT_CMDs[] = {
+    //{ .id = "700",                                                },   // RF SW Fifo Element Count 
+      { .id = "701", .tx = "ATBC\r", .tx_len = 5, .rx_max_bytes = 4 },   // Bytes Transmited
+      { .id = "702", .tx = "ATTR\r", .tx_len = 5, .rx_max_bytes = 2 },   // Transmision Failer Count
+      { .id = "703", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Last Packet RSSI
+      { .id = "704", .tx = "ATGD\r", .tx_len = 5, .rx_max_bytes = 2 },   // Good Packet Received
+      { .id = "705", .tx = "ATEA\r", .tx_len = 5, .rx_max_bytes = 2 },   // MAC ACK Failer Count
+      { .id = "706", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time
+      { .id = "707", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
+  };
 
-      // MODE #2) CAN1 + Meta Data -> SLCAN FIFO -> XBee RF + LTE:
-      // #########################################################################################################
+  // LTE At Commands List
+  AT_CMD LTE_AT_CMDs[] = {
+    //{ .id = "780",                                                },   // LTE SW Fifo Element Count 
+      { .id = "781", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Cellular Singal Strength
+      { .id = "782", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time 
+      { .id = "783", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
+      // { .id = "381", .tx = "ATFC\r" },   // Freq Channel Number
+      // { .id = "382", .tx = "ATDT\r" },   // Time UTC
+  };
 
-      // RF AT Commands List
-      AT_CMD RF_AT_CMDs[] = {
-        //{ .id = "700",                                                },   // RF SW Fifo Element Count 
-          { .id = "701", .tx = "ATBC\r", .tx_len = 5, .rx_max_bytes = 4 },   // Bytes Transmited
-          { .id = "702", .tx = "ATTR\r", .tx_len = 5, .rx_max_bytes = 2 },   // Transmision Failer Count
-          { .id = "703", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Last Packet RSSI
-          { .id = "704", .tx = "ATGD\r", .tx_len = 5, .rx_max_bytes = 2 },   // Good Packet Received
-          { .id = "705", .tx = "ATEA\r", .tx_len = 5, .rx_max_bytes = 2 },   // MAC ACK Failer Count
-          { .id = "706", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time
-          { .id = "707", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
-      };
-      // LTE At Commands List
-      AT_CMD LTE_AT_CMDs[] = {
-        //{ .id = "780",                                                },   // LTE SW Fifo Element Count 
-          { .id = "781", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Cellular Singal Strength
-          { .id = "782", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time 
-          { .id = "783", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
-          // { .id = "381", .tx = "ATFC\r" },   // Freq Channel Number
-          // { .id = "382", .tx = "ATDT\r" },   // Time UTC
-      };
-      // Changing the Guard Time & Timeout Time
-      AT_CMD module_configure[] = {
-          { .id = "XXX", .tx = "ATGT2\r", .tx_len = 6, .rx_max_bytes = 0 },   // Guard Time = 2ms (min)
-          { .id = "XXX", .tx = "ATCT2\r", .tx_len = 6, .rx_max_bytes = 0 },   // Command Mode Timeout = 200ms (min) 
-          { .id = "XXX", .tx = "ATWR\r",  .tx_len = 5, .rx_max_bytes = 0 },    // Write the changes to non volatile flash mem 
-      };
+  // Changing the Guard Time & Timeout Time
+  AT_CMD module_configure[] = {
+      { .id = "XXX", .tx = "ATGT2\r", .tx_len = 6, .rx_max_bytes = 0 },   // Guard Time = 2ms (min)
+      { .id = "XXX", .tx = "ATCT2\r", .tx_len = 6, .rx_max_bytes = 0 },   // Command Mode Timeout = 200ms (min) 
+      { .id = "XXX", .tx = "ATWR\r",  .tx_len = 5, .rx_max_bytes = 0 },    // Write the changes to non volatile flash mem 
+  };
 
-      // Super Loop
-      uint32_t iterations = 0;
-      uint32_t lte_iterations = 0;
-      const uint32_t MAX_ITERATIONS = 9600000;  // ~12 sec when no CAN msgs
-      for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
-      for(int i = 0; i < 11; i ++){HAL_GPIO_WritePin(arr[i].GPIOx, arr[i].GPIO_PIN, GPIO_PIN_SET);}
-      while(1) {
+  // Sanity Check
+  for(int i = 0; i < 10; i++){cyc(); HAL_Delay(100);}
+  for(int i = 0; i < 11; i ++){HAL_GPIO_WritePin(arr[i].GPIOx, arr[i].GPIO_PIN, GPIO_PIN_SET);}
 
-          // Configure the Guard Time and Timeout Time
-          // -----------------------------------------------------------------------------------------------------
-          // RF:
-          // read_meta_data(&huart2, &module_configure, ARRAY_SIZE(module_configure));
-          // LTE:
-          // read_meta_data(&huart5, &module_configure, ARRAY_SIZE(module_configure));
-          // NOTE NOTE NOTE NOTE NOTE NOTE 
-          // Need to comment out the tx_push part of the read_meta_data outherwise you WILL HARDFAULT 
-          // ALSO comment back in the hal delay in there (has a comment next to it)
-          // while(1){
-          //   HAL_Delay(50);
-          //   cyc();
-          // }
-          // -----------------------------------------------------------------------------------------------------
+  // Super Loop
+  uint32_t iterations = 0;
+  uint32_t lte_iterations = 0;
+  const uint32_t MAX_ITERATIONS = 9600000;  // ~12 sec when no CAN msgs
+  while(1) {
 
-          // Attempt to send LTE (have not tested)
-          // -----------------------------------------------------------------------------------------------------
-          GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-          if (LTE_NCTS == GPIO_PIN_SET) {display_byte_on_7seg(ERR_LTE_HW_FIFO_FULL);}// HW FIFO Full
-          else{
-              SLCAN poped_msg;
-              if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
-                  if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){display_byte_on_7seg(ERR_UART_LTE_SEND_FAIL);}
-                  lte_iterations ++;
-                  // NOTE: right now if this happens the tx msg is just discarded
-              }
+      // Configure the Guard Time and Timeout Time
+      // -----------------------------------------------------------------------------------------------------
+      // RF:
+      // read_meta_data(&huart2, &module_configure, ARRAY_SIZE(module_configure));
+      // LTE:
+      // read_meta_data(&huart5, &module_configure, ARRAY_SIZE(module_configure));
+      // NOTE NOTE NOTE NOTE NOTE NOTE 
+      // Need to comment out the tx_push part of the read_meta_data outherwise you WILL HARDFAULT 
+      // ALSO comment back in the hal delay in there (has a comment next to it)
+      // while(1){
+      //   HAL_Delay(50);
+      //   cyc();
+      // }
+      // -----------------------------------------------------------------------------------------------------
+
+      // Attempt to send LTE (have not tested)
+      // -----------------------------------------------------------------------------------------------------
+      GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
+      if (LTE_NCTS == GPIO_PIN_SET) {display_byte_on_7seg(ERR_LTE_HW_FIFO_FULL);}// HW FIFO Full
+      else{
+          SLCAN poped_msg;
+          if(tx_fifo_pop(&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
+              if(HAL_UART_Transmit(&huart5, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){display_byte_on_7seg(ERR_UART_LTE_SEND_FAIL);}
+              lte_iterations ++;
+              // NOTE: right now if this happens the tx msg is just discarded
           }
-          // -----------------------------------------------------------------------------------------------------
-
-          // Attempt to send RF (tested)
-          // -----------------------------------------------------------------------------------------------------
-          // GPIO_PinState RF_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-          // if (RF_NCTS == GPIO_PIN_SET) {cyc();} 
-          // else{
-          //     SLCAN poped_msg;
-          //     if(tx_fifo_pop(&rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, &poped_msg)){
-          //         if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
-          //         send_fifo_count(0x700, rf_tx_fifo_head, rf_tx_fifo_tail);       // Num elements in RF SW Fifo = id 0x700
-          //         // NOTE: right now if this happens the tx msg is just discarded
-          //     }
-          // }
-          // -----------------------------------------------------------------------------------------------------
-
-          // Read / Compute & Transmit Meta Data
-          // -----------------------------------------------------------------------------------------------------
-          // Every 25 LTE msgs, send the size of the LTE SW FIFO
-          if(lte_iterations > 25){
-            // Num elements in LTE SW Fifo = id 0x780
-            send_fifo_count(0x780, lte_tx_fifo_head, lte_tx_fifo_tail); 
-            lte_iterations = 0;
-          }
-          // Every MAX_ITERATIONS, read and meta data and put into SW FIFOs
-          if(iterations >= MAX_ITERATIONS){
-            // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
-            read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
-            iterations = 0;
-          }
-          else{iterations ++;}
-          // -----------------------------------------------------------------------------------------------------
       }
-      // #########################################################################################################
-      
-    /* USER CODE END WHILE */
-    /* USER CODE BEGIN 3 */
+      // -----------------------------------------------------------------------------------------------------
+
+      // Attempt to send RF (tested)
+      // -----------------------------------------------------------------------------------------------------
+      // GPIO_PinState RF_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+      // if (RF_NCTS == GPIO_PIN_SET) {cyc();} 
+      // else{
+      //     SLCAN poped_msg;
+      //     if(tx_fifo_pop(&rf_tx_fifo, &rf_tx_fifo_head, &rf_tx_fifo_tail, &poped_msg)){
+      //         if(HAL_UART_Transmit(&huart2, (uint8_t *)poped_msg.slcanmsg, tx_msg_len(poped_msg.slcanmsg), HAL_MAX_DELAY) != HAL_OK){cyc(); /* UART Fail */}
+      //         send_fifo_count(0x700, rf_tx_fifo_head, rf_tx_fifo_tail);       // Num elements in RF SW Fifo = id 0x700
+      //         // NOTE: right now if this happens the tx msg is just discarded
+      //     }
+      // }
+      // -----------------------------------------------------------------------------------------------------
+
+      // Read / Compute & Transmit Meta Data
+      // -----------------------------------------------------------------------------------------------------
+      // Every 25 LTE msgs, send the size of the LTE SW FIFO
+      if(lte_iterations > 25){
+        // Num elements in LTE SW Fifo = id 0x780
+        send_fifo_count(0x780, lte_tx_fifo_head, lte_tx_fifo_tail); 
+        lte_iterations = 0;
+      }
+      // Every MAX_ITERATIONS, read and meta data and put into SW FIFOs
+      if(iterations >= MAX_ITERATIONS){
+        // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
+        read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
+        iterations = 0;
+      }
+      else{iterations ++;}
+      // -----------------------------------------------------------------------------------------------------
   }
-  /* USER CODE END 3 */
+
 }
 
 /**
@@ -608,13 +449,6 @@ void SystemClock_Config(void)
 static void MX_CAN1_Init(void)
 {
 
-  /* USER CODE BEGIN CAN1_Init 0 */
-
-  /* USER CODE END CAN1_Init 0 */
-
-  /* USER CODE BEGIN CAN1_Init 1 */
-
-  /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
   hcan1.Init.Prescaler = 96;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
@@ -632,10 +466,6 @@ static void MX_CAN1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN CAN1_Init 2 */
-
-  /* USER CODE END CAN1_Init 2 */
-
 }
 
 /**
@@ -645,14 +475,6 @@ static void MX_CAN1_Init(void)
   */
 static void MX_CAN3_Init(void)
 {
-
-  /* USER CODE BEGIN CAN3_Init 0 */
-
-  /* USER CODE END CAN3_Init 0 */
-
-  /* USER CODE BEGIN CAN3_Init 1 */
-
-  /* USER CODE END CAN3_Init 1 */
   hcan3.Instance = CAN3;
   hcan3.Init.Prescaler = 16;
   hcan3.Init.Mode = CAN_MODE_NORMAL;
@@ -669,10 +491,6 @@ static void MX_CAN3_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN CAN3_Init 2 */
-
-  /* USER CODE END CAN3_Init 2 */
-
 }
 
 static void MX_TIM2_Init(void)
@@ -702,7 +520,6 @@ static void MX_TIM5_Init(void)
   }
 }
 
-
 /**
   * @brief TIM14 Initialization Function
   * @param None
@@ -710,14 +527,6 @@ static void MX_TIM5_Init(void)
   */
 static void MX_TIM14_Init(void)
 {
-
-  /* USER CODE BEGIN TIM14_Init 0 */
-
-  /* USER CODE END TIM14_Init 0 */
-
-  /* USER CODE BEGIN TIM14_Init 1 */
-
-  /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
   htim14.Init.Prescaler = 48000 - 1;  // 10 ms per tick at 48 MHz clock
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -728,10 +537,6 @@ static void MX_TIM14_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM14_Init 2 */
-
-  /* USER CODE END TIM14_Init 2 */
-
 }
 
 /**
@@ -741,14 +546,6 @@ static void MX_TIM14_Init(void)
   */
 static void MX_UART5_Init(void)
 {
-
-  /* USER CODE BEGIN UART5_Init 0 */
-
-  /* USER CODE END UART5_Init 0 */
-
-  /* USER CODE BEGIN UART5_Init 1 */
-
-  /* USER CODE END UART5_Init 1 */
   huart5.Instance = UART5;
   huart5.Init.BaudRate = 115200;
   huart5.Init.WordLength = UART_WORDLENGTH_8B;
@@ -761,10 +558,6 @@ static void MX_UART5_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN UART5_Init 2 */
-
-  /* USER CODE END UART5_Init 2 */
-
 }
 
 /**
@@ -774,14 +567,6 @@ static void MX_UART5_Init(void)
   */
 static void MX_USART2_UART_Init(void)
 {
-
-  /* USER CODE BEGIN USART2_Init 0 */
-
-  /* USER CODE END USART2_Init 0 */
-
-  /* USER CODE BEGIN USART2_Init 1 */
-
-  /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
   huart2.Init.BaudRate = 115200;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
@@ -794,10 +579,6 @@ static void MX_USART2_UART_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART2_Init 2 */
-
-  /* USER CODE END USART2_Init 2 */
-
 }
 
 /**
@@ -808,8 +589,6 @@ static void MX_USART2_UART_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -871,12 +650,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP; // Default to 1 = NO SENDING (prob safer = no data loss) 
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
 }
-
-/* USER CODE BEGIN 4 */
 
 // Finds the number of elements in the SW fifo
 // Head and tails are indexes into the FIFO
@@ -901,7 +675,6 @@ void send_fifo_count(uint16_t can_id, uint16_t head, uint16_t tail){
     // if(!rf_push_success){cyc();}
     if(!lte_push_success){display_byte_on_7seg(ERR_LTE_SW_FIFO_FULL);}
 }
-
 
 // Push a message into the CAN FIFO.
 // Assumes caller disables interrupts if needed.
@@ -936,7 +709,6 @@ uint8_t tx_fifo_pop(SLCAN* tx_fifo, uint16_t* tx_fifo_head, uint16_t* tx_fifo_ta
     *tx_fifo_tail = (*tx_fifo_tail + 1) % CAN_FIFO_SIZE;
     return 1;
 }
-
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
@@ -1000,24 +772,6 @@ int UART_FIFO_get_Char(char* rx_char) {
     fifo_tail = (fifo_tail + 1) % FIFO_SIZE;
     return 1;
 }
-
-void transmit_ASCII_CAN_Packet(CAN_FORMATTED_Packet* msg){
-      char uartBuff[32];
-      int uartBuffLen = 0;
-      uartBuffLen = sprintf(uartBuff, "-------------------------\n\r");
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      uartBuffLen = sprintf(uartBuff, "CAN ID: 0x%X \n\r", msg->can_id);
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      uartBuffLen = sprintf(uartBuff, "Time Stamp: %u \n\r", msg->time_stamp);
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      uartBuffLen = sprintf(uartBuff, "Num Data Bytes: %u \n\r", msg->num_bytes);
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      uartBuffLen = sprintf(uartBuff, "Data: %s \n\r", msg->data);
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-      uartBuffLen = sprintf(uartBuff, "-------------------------\n\r");
-      HAL_UART_Transmit(&huart2, (uint8_t *)uartBuff, uartBuffLen, HAL_MAX_DELAY);
-}
-
 
 // Expects ASCII msg (max 8 bytes)
 void format_UART_Msg(char* msg, CAN_FORMATTED_Packet* formatted_msg){
@@ -1100,7 +854,6 @@ void read_meta_data(UART_HandleTypeDef* huart_ptr, AT_CMD* list_AT_CMDs, uint32_
             if(!success){display_byte_on_7seg(ERR_LTE_SW_FIFO_FULL);} // FIFO Full = cyc()
         }
     }
-    return;
 }
 
 // rx_length INCLUDES the \r at the end of the msg 
@@ -1134,20 +887,6 @@ void send_AT_cmd(UART_HandleTypeDef* huart_ptr, AT_CMD* at_cmd){
     // Update Rx_len field of AT_CMD 
     at_cmd->rx_len = index; // (includes the \r in len count)
 }
-
-
-
-// // AT Command (send, and receive)
-// #define AT_CMD_MAX_LEN 6      // AT CMD = 4, \r\0 = 2, ==> 6
-// #define RX_MSG_MAX_LEN 16     // 16 ASCII Hex Chars = 8 bytes = Max CAN data payload
-// typedef struct {
-//     char id[4];               // Can ID (null terimating string)
-//     char tx[AT_CMD_MAX_LEN];  // Must terminate with \r
-//     char rx[RX_MSG_MAX_LEN];  // Will terminate with \r
-//     uint8_t rx_len;           // How many bytes were recieved 
-//     uint8_t rx_max_bytes;     // Max number of bytes for this can msg
-// } AT_CMD;
-
 
 // Assumes that DLC is uint8_t not char 
 // uint32_t format_slcan_frame_AT_CMD(char* can_id, char* data, uint8_t rx_bytes, char* out_str){
@@ -1190,8 +929,6 @@ uint32_t format_slcan_frame_AT_CMD(AT_CMD* command, char* out_str){
     return 1;
 }
 
-
-
 // can_id   = [0, x7FF]
 // data     = Max 8 bytes 
 // dlc      = num bytes of data 
@@ -1229,10 +966,6 @@ uint32_t tx_msg_len(char* tx_msg){
         index ++;
     }
 }
-
-
-
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
