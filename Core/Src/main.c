@@ -255,21 +255,20 @@ static void MX_TIM5_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-typedef struct{
-    GPIO_TypeDef *GPIOx;
-    uint16_t GPIO_PIN;
 
-} gpio_t;
+#define CAN_FIFO_FULL 0
+#define UART_FIFO_FULL 1
+#define LTE_FIFO_FULL 2
 
 void iter(void){
     static int i = 0;
-    displayNum_SevenSegment(display_1, i);
+    //displayNum_SevenSegment(display_1, i);
     i = (i + 1) % 9;
 }
 
 void cyc(void){
     static int i = 0;
-    displayNum_SevenSegment(display_0, i);
+    //displayNum_SevenSegment(display_0, i);
     i = (i + 1) % 9;
 }
 
@@ -362,7 +361,7 @@ int main(void)
   // Enable RX interrupt
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
-  // HAL_Delay(2000);
+  
   while (1)
   {
 
@@ -453,7 +452,9 @@ int main(void)
           // Attempt to send LTE (have not tested)
           // -----------------------------------------------------------------------------------------------------
           GPIO_PinState LTE_NCTS = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9);
-          if (LTE_NCTS == GPIO_PIN_SET) {cyc();}  // HW FIFO Full
+          if (LTE_NCTS == GPIO_PIN_SET) {
+            displayTwoNum_SevenSegment(LTE_FIFO_FULL);
+          }  // HW FIFO Full
           else{
               SLCAN poped_msg;
               if(tx_fifo_pop((SLCAN *)&lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, &poped_msg)){
