@@ -69,11 +69,11 @@ volatile uint16_t fifo_tail = 0;
 
 // For CAN1 Reception (slcan)
 // -----------------------------
-#define CAN_FIFO_SIZE 1024 // 256 SL-CAN Msgs
+#define CAN_FIFO_SIZE 8192  // 2^12 (this is 25% of total RAM) 
 
-volatile SLCAN rf_tx_fifo[CAN_FIFO_SIZE];
-volatile uint16_t rf_tx_fifo_head = 0;
-volatile uint16_t rf_tx_fifo_tail = 0;
+// volatile SLCAN rf_tx_fifo[CAN_FIFO_SIZE];
+// volatile uint16_t rf_tx_fifo_head = 0;
+// volatile uint16_t rf_tx_fifo_tail = 0;
 
 volatile SLCAN lte_tx_fifo[CAN_FIFO_SIZE];
 volatile uint16_t lte_tx_fifo_head = 0;
@@ -204,6 +204,7 @@ static const uint8_t hex_to_7seg[16] = {
 #define ERR_LTE_SW_FIFO_FULL        0x20  // LTE software FIFO full
 #define ERR_RF_HW_FIFO_FULL         0x30  // RF hardware FIFO full
 #define ERR_RF_SW_FIFO_FULL         0x40  // RF software FIFO full
+#define ERR_RESET_SEND_FAIL         0x50  // Failed to send reset-state msg
 
 void display_byte_on_7seg(uint8_t value) {
     uint8_t high_nibble = (value >> 4) & 0x0F; // Left digit
@@ -274,6 +275,10 @@ int main(void)
   HAL_TIM_Base_Start(&htim5);
 
   // NOTE: ############ Very important for UART2 ISR reception ################
+  char slcan_msg [SLCAN_MAX_STRING_LEN];
+  uint8_t random_data = 0xFF; // value does not matter
+  if(!format_slcan_frame(0x7FF, (uint8_t*)&random_data, 1, &slcan_msg)){display_byte_on_7seg(ERR_SLCAN_AT_FMT_FAIL);}
+  if(!tx_fifo_push(lte_tx_fifo, &lte_tx_fifo_head, &lte_tx_fifo_tail, slcan_msg)){display_byte_on_7seg(ERR_RESET_SEND_FAIL);}
   __enable_irq();
 
   // Set Priority level and enable IRS for UART2 RX 
@@ -300,7 +305,7 @@ int main(void)
       { .id = "703", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Last Packet RSSI
       { .id = "704", .tx = "ATGD\r", .tx_len = 5, .rx_max_bytes = 2 },   // Good Packet Received
       { .id = "705", .tx = "ATEA\r", .tx_len = 5, .rx_max_bytes = 2 },   // MAC ACK Failer Count
-      { .id = "706", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time
+      { .id = "706", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Guard Time
       { .id = "707", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
   };
 
@@ -308,7 +313,7 @@ int main(void)
   AT_CMD LTE_AT_CMDs[] = {
     //{ .id = "780",                                                },   // LTE SW Fifo Element Count 
       { .id = "781", .tx = "ATDB\r", .tx_len = 5, .rx_max_bytes = 1 },   // Cellular Singal Strength
-      { .id = "782", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 2 },   // Guard Time 
+      { .id = "782", .tx = "ATGT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Guard Time 
       { .id = "783", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
       // { .id = "381", .tx = "ATFC\r" },   // Freq Channel Number
       // { .id = "382", .tx = "ATDT\r" },   // Time UTC
