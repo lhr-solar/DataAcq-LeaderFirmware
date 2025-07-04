@@ -384,7 +384,9 @@ int main(void)
       }
       // Every MAX_ITERATIONS, read and meta data and put into SW FIFOs
       if(iterations >= MAX_ITERATIONS){
-        // read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
+        // Put 0x00 on the 7seg to clear old error codes 
+        display_byte_on_7seg(0x00);
+        read_meta_data(&huart2, &RF_AT_CMDs, ARRAY_SIZE(RF_AT_CMDs));
         read_meta_data(&huart5, &LTE_AT_CMDs, ARRAY_SIZE(LTE_AT_CMDs));
         iterations = 0;
       }
