@@ -309,6 +309,14 @@ int main(void)
       { .id = "707", .tx = "ATCT\r", .tx_len = 5, .rx_max_bytes = 1 },   // Command Mode Timeout 
   };
 
+
+// t_243_8_D17FD743_98984041
+// 1 = 43_D7_7F_D1 = decimal 1,138,196,433
+// 2 = 41_40_98_98 = decimal 1,094,752,408
+
+// t_241_8_0000000000080000
+
+
   // LTE At Commands List
   AT_CMD LTE_AT_CMDs[] = {
     //{ .id = "780",                                                },   // LTE SW Fifo Element Count 
